@@ -14,6 +14,8 @@ Parte del código de [Inventario_almacen_VD](https://github.com/benjaminolate/In
 - **Funciona sin internet:** la app queda guardada en el dispositivo (service worker) y los datos en su base local (IndexedDB).
 - **Instalable** como app (PWA), sin pasar por Play Store.
 - **Respaldo** en un archivo y restauración desde él.
+- **Extensiones:** cada tienda activa solo lo que usa (conteo por sectores, recibir mercadería, fiados, pan: aviso y reservas). Al quitar una, sus datos no se borran.
+- **Apariencia:** 6 paletas de colores o colores propios, estilo (redondeado, suave, recto) y letra de títulos, para toda la tienda; modo claro u oscuro y letra grande, por dispositivo.
 
 ## Cómo se guardan los datos
 
