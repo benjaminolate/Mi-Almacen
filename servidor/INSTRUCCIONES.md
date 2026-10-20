@@ -1,0 +1,70 @@
+# Cómo prender el servidor en tu computador (Fase 2)
+
+El servidor es **PocketBase**, un programa gratis de un solo archivo. Guarda el "cuaderno maestro" de la tienda y mantiene a todos los dispositivos al día. Mientras probamos, corre en tu computador y lo ven los celulares que están **en el mismo wifi**.
+
+## 1. Descargar el proyecto
+
+En [github.com/benjaminolate/Mi-Almacen](https://github.com/benjaminolate/Mi-Almacen) toca **Code → Download ZIP** y descomprímelo, por ejemplo en `Documentos`. Te queda una carpeta `Mi-Almacen-main`.
+
+(Si usas git: `git clone https://github.com/benjaminolate/Mi-Almacen.git`.)
+
+## 2. Poner PocketBase en la carpeta `servidor`
+
+1. Descarga PocketBase desde [pocketbase.io/docs](https://pocketbase.io/docs/). En Windows elige **Windows x64**. Probé la app con la versión **0.40.5**; una más nueva debería funcionar igual.
+2. Descomprime el ZIP.
+3. Copia `pocketbase.exe` (en Mac o Linux: `pocketbase`) dentro de la carpeta **`servidor`** del proyecto, al lado de `iniciar.bat`.
+
+## 3. Prenderlo
+
+- **Windows:** doble clic en `servidor/iniciar.bat`. Se abre una ventana negra; déjala abierta mientras uses la app.
+  - La primera vez, Windows pregunta si permites que PocketBase use la red: marca **Redes privadas** y acepta. Sin eso, los celulares no lo van a encontrar.
+- **Mac o Linux:** en una terminal, `servidor/iniciar.sh`.
+
+La primera vez PocketBase puede abrir el navegador para crear una cuenta de **administrador** del servidor. Es opcional: la app no la necesita. Si la creas, desde `http://localhost:8090/_/` puedes ver los datos guardados en la tabla `cambios`.
+
+Los datos quedan en una carpeta **`mi-almacen-datos`**, al lado de la carpeta del proyecto (fuera de ella, para que nunca se suban a GitHub).
+
+## 4. Abrir la app en el computador
+
+Abre **http://localhost:8090** en el navegador.
+
+- Si ya tenías una tienda creada en esta dirección, se conecta sola al servidor.
+- Si no, crea la tienda. Arriba a la derecha tiene que decir **"Sincronizado"**.
+
+> La app de GitHub Pages (`benjaminolate.github.io/Mi-Almacen`) es otra dirección y tiene sus propios datos. Por ahora no puede conectarse al servidor de tu computador: el navegador bloquea que una página con candado (https) hable con una sin candado (http). Eso se resuelve en la Fase 3.
+
+## 5. Sumar un celular
+
+1. Averigua la **IP de tu computador** en el wifi:
+   - Windows: abre "Símbolo del sistema", escribe `ipconfig` y busca **Dirección IPv4** (algo como `192.168.1.20`).
+   - Mac: Preferencias del Sistema → Red.
+2. En el computador, en la app: **Más → Tienda y datos → Sincronización**. En **Dirección del servidor** cambia `localhost` por la IP, por ejemplo `http://192.168.1.20:8090`, y toca **Guardar**. Así el link de invitación sirve para los celulares.
+3. Toca **Enviar por WhatsApp** (o **Copiar link**) y ábrelo en el celular, conectado al **mismo wifi**.
+4. En el celular toca **Unirme y descargar los datos**. En unos segundos tiene todos los productos.
+
+Desde ahí, lo que se venda en uno aparece en el otro al instante.
+
+## 6. Qué probar
+
+- Vende en el celular y mira cómo aparece en el computador (y al revés).
+- Apaga el wifi del celular, vende algo y vuelve a prenderlo: la venta llega sola al computador. Mientras no hay conexión, arriba dice **"Sin internet · N por enviar"**.
+- Cierra la ventana del servidor, sigue vendiendo en los dos, y vuelve a prenderlo: todo se junta.
+- Cambia el precio de un mismo producto en los dos: queda el último que se cambió.
+
+## Lo que todavía no funciona en el celular (se arregla en la Fase 3)
+
+Como la dirección del wifi (`http://192.168...`) no tiene candado, en el celular:
+
+- la **cámara en vivo** para escanear no abre; sí funcionan **"Sacar foto al código"** y escribir el número,
+- no se puede **instalar** la app ni abrirla sin conexión al servidor.
+
+En el computador (`localhost`) todo funciona, incluso la cámara y la instalación.
+
+## Si algo falla
+
+| Problema | Qué hacer |
+|---|---|
+| La ventana dice "Falta pocketbase.exe" | Copia `pocketbase.exe` dentro de la carpeta `servidor`. |
+| El celular no abre `http://192.168...:8090` | Revisa que esté en el mismo wifi, que la IP sea la correcta y que Windows haya dado permiso a PocketBase (Panel de control → Firewall de Windows → Permitir una aplicación → PocketBase → Privada). |
+| Arriba dice "Sin servidor" | La ventana del servidor está cerrada o el computador cambió de IP. Préndelo de nuevo; los cambios se envían solos. |
+| "El servidor no tiene datos de esa tienda" al unirse | El link se copió incompleto. Vuelve a enviarlo desde el computador. |

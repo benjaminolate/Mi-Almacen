@@ -3,8 +3,8 @@
 // Todo lo que pasa en la tienda se guarda primero aquí, en el mismo celular o
 // computador, así la app funciona sin internet. Cada cambio queda además en la
 // "bandeja de salida" (outbox): la lista de cambios que este dispositivo todavía
-// no ha enviado al servidor. El servidor y la sincronización llegan en la Fase 2;
-// mientras tanto la bandeja solo se acumula, y nada se pierde.
+// no ha enviado al servidor. sync.js la envía cuando hay conexión, y solo la
+// vacía cuando el servidor confirma que los guardó, así nada se pierde.
 //
 // Orden de los cambios entre dispositivos: cada cambio lleva un sello "hlc"
 // (reloj lógico híbrido). Es la hora del dispositivo, pero nunca retrocede y
@@ -43,9 +43,11 @@ function uuid(){
 }
 
 // ---------- Reloj lógico híbrido ----------
-const clock = { ms:0, n:0, device:"" };
+// offset: diferencia entre el reloj del servidor y el de este dispositivo (la calcula sync.js)
+const clock = { ms:0, n:0, device:"", offset:0 };
+const now = () => Date.now() + clock.offset;
 function tick(){
-  const now = Date.now();
+  const now = Date.now() + clock.offset;
   if (now > clock.ms){ clock.ms = now; clock.n = 0; } else clock.n++;
   return `${String(clock.ms).padStart(13, "0")}-${String(clock.n).padStart(4, "0")}-${clock.device}`;
 }
@@ -63,6 +65,7 @@ async function loadAll(){
   out.pending = await req(tx.objectStore("outbox").count());
   out.meta = Object.fromEntries(out.meta.map(m => [m.key, m.value]));
   if (out.meta.clock){ clock.ms = out.meta.clock.ms; clock.n = out.meta.clock.n; }
+  if (typeof out.meta.offset === "number") clock.offset = out.meta.offset;
   return out;
 }
 
@@ -84,6 +87,43 @@ async function apply(ops){
   await done(tx);
 }
 
+// ---------- Sincronización (la usa sync.js) ----------
+// Los primeros n cambios de la bandeja de salida, en el orden en que se hicieron
+async function outboxBatch(n){
+  const db = await open(), st = db.transaction("outbox").objectStore("outbox"), out = [];
+  return new Promise((res, rej) => { const r = st.openCursor(); r.onerror = () => rej(r.error);
+    r.onsuccess = () => { const c = r.result; if (!c || out.length >= n) return res(out); out.push(c.value); c.continue(); }; });
+}
+// El servidor confirmó que guardó estos cambios: se sacan de la bandeja
+async function ack(seqs){
+  if (!seqs.length) return;
+  const db = await open(), tx = db.transaction("outbox", "readwrite"), st = tx.objectStore("outbox");
+  seqs.forEach(s => st.delete(s)); await done(tx);
+}
+// Aplica cambios que llegan del servidor. Para cada registro gana el cambio con el
+// sello hlc más nuevo, así todos los dispositivos terminan con lo mismo sin importar
+// en qué orden reciban los cambios. Devuelve cuántos registros cambiaron aquí.
+async function applyRemote(changes){
+  if (!changes.length) return 0;
+  const db = await open(), names = [...new Set(changes.map(c => c.store))].filter(s => s in STORES && s !== "meta");
+  if (!names.length) return 0;
+  const tx = db.transaction(names, "readwrite"); let n = 0;
+  for (const c of changes){
+    if (!names.includes(c.store)) continue;
+    seen(c.hlc);
+    const st = tx.objectStore(c.store), id = c.del ?? c.value?.[STORES[c.store]];
+    if (id == null) continue;
+    const cur = await req(st.get(id));
+    if (cur && cur._v && cur._v >= c.hlc) continue;
+    if (c.del != null) { if (cur){ st.delete(id); n++; } }
+    else { st.put(Object.assign({}, c.value, { _v:c.hlc })); n++; }
+  }
+  await done(tx);
+  await setMeta("clock", { ms:clock.ms, n:clock.n });
+  return n;
+}
+
+async function getMeta(key){ const db = await open(); return (await req(db.transaction("meta").objectStore("meta").get(key)))?.value; }
 async function setMeta(key, value){ const db = await open(), tx = db.transaction("meta", "readwrite"); tx.objectStore("meta").put({ key, value }); await done(tx); }
 async function pendingCount(){ const db = await open(); return req(db.transaction("outbox").objectStore("outbox").count()); }
 
@@ -113,5 +153,5 @@ async function persist(){
     return navigator.storage?.persist ? await navigator.storage.persist() : false; } catch(e){ return false; }
 }
 
-window.LocalDB = { open, uuid, tick, seen, clock, loadAll, apply, setMeta, pendingCount, exportAll, importAll, wipe, persist };
+window.LocalDB = { open, uuid, tick, seen, clock, now, loadAll, apply, getMeta, setMeta, pendingCount, outboxBatch, ack, applyRemote, exportAll, importAll, wipe, persist };
 })();

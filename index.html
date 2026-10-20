@@ -142,6 +142,7 @@ nav.tabs button[aria-current="page"]{color:var(--brand)}
 
 <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
 <script src="local-db.js"></script>
+<script src="sync.js"></script>
 <script>
 (function(){
 "use strict";
@@ -272,7 +273,7 @@ function seedExtras(){
 // `act`, que actualiza S y guarda el cambio en la base local antes de confirmarlo.
 let MODE = null;      // "local" cuando la tienda está abierta; null en la pantalla de inicio
 let S = null;
-const meta = { tienda:null, device:null, demo:false, pending:0 };
+const meta = { tienda:null, device:null, demo:false, pending:0, servidor:"" };
 
 const P = id => S.products.find(p => p.id === id);
 const clientRow = c => ({ id:c.id, name:c.name, phone:c.phone || "" });
@@ -281,7 +282,7 @@ const ops = (store, list) => list.map(value => ({ store, value }));
 
 async function loadLocal(){
   const t = await LocalDB.loadAll();
-  meta.tienda = t.meta.tienda || null; meta.device = t.meta.device || null; meta.demo = !!t.meta.demo; meta.pending = t.pending;
+  meta.tienda = t.meta.tienda || null; meta.device = t.meta.device || null; meta.demo = !!t.meta.demo; meta.pending = t.pending; meta.servidor = t.meta.servidor || "";
   if (meta.device) LocalDB.clock.device = meta.device.id;
   const aj = Object.fromEntries(t.ajustes.map(a => [a.clave, a.valor]));
   const clients = t.clients.map(c => ({ id:c.id, name:c.name, phone:c.phone || "", items:[] })), byId = Object.fromEntries(clients.map(c => [c.id, c]));
@@ -291,12 +292,11 @@ async function loadLocal(){
     clients, reservas: t.reservas.map(strip), panMsg: aj.mensaje_pan ?? "", ajustes: aj };
 }
 // Guarda en la base local y actualiza el contador de cambios por enviar
-async function commit(list){ await LocalDB.apply(list); meta.pending = await LocalDB.pendingCount(); }
+async function commit(list){ await LocalDB.apply(list); meta.pending = await LocalDB.pendingCount(); Sync.syncSoon(); }
 
 // Crea la tienda en este dispositivo. inicio: "catalogo" | "vacio" | "ejemplo"
 async function createStore(nombre, persona, inicio){
-  const device = { id: uid().slice(0, 8), nombre: /Android|iPhone|iPad/i.test(navigator.userAgent) ? "Celular" : "Computador", creado: Date.now() };
-  LocalDB.clock.device = device.id;
+  const device = newDevice();
   const tienda = { id: uid(), nombre, persona, creada: Date.now() };
   let data;
   if (inicio === "ejemplo") data = buildSeed();
@@ -314,7 +314,27 @@ async function createStore(nombre, persona, inicio){
   await LocalDB.setMeta("device", device);
   await LocalDB.setMeta("tienda", tienda);
   await LocalDB.setMeta("demo", local);
+  if (!local && meta.servidor) await LocalDB.setMeta("servidor", meta.servidor);
   await commit(list);
+  await LocalDB.persist();
+}
+const newDevice = () => ({ id: uid().replace(/-/g, "").slice(0, 8), nombre: /Android|iPhone|iPad/i.test(navigator.userAgent) ? "Celular" : "Computador", creado: Date.now() });
+
+// Une este dispositivo a una tienda que ya existe en el servidor y descarga todos sus datos
+async function joinStore(servidor, tiendaId){
+  if (!(await Sync.probe(servidor))) throw new Error("No se encontró el servidor en " + servidor);
+  const device = newDevice();
+  await LocalDB.wipe();
+  LocalDB.clock.device = device.id;
+  await LocalDB.setMeta("device", device);
+  await LocalDB.setMeta("servidor", servidor);
+  await LocalDB.setMeta("demo", false);
+  Sync.start(servidor, tiendaId);
+  await Sync.syncNow();
+  if (Sync.state.status === "error") throw new Error(Sync.state.error);
+  await loadLocal();
+  if (!S.ajustes.tienda_nombre && !S.products.length) throw new Error("El servidor no tiene datos de esa tienda. Revisa el código.");
+  await LocalDB.setMeta("tienda", { id:tiendaId, nombre:S.ajustes.tienda_nombre || "Tienda", persona:"", unida:Date.now() });
   await LocalDB.persist();
 }
 
@@ -357,13 +377,13 @@ const ui = { view:"inicio", cart:[], recv:{ supplier:"", items:[] }, sector:null
 // ---------- Acciones: cada cambio pasa por aquí y queda guardado en el dispositivo ----------
 const act = {
   async sale(lines){
-    const now = Date.now(), grupo = uid();
+    const now = LocalDB.now(), grupo = uid();
     const movs = lines.map(l => ({ id:uid(), pid:l.pid, type:"venta", qty:l.qty, at:now, price:P(l.pid).price, grupo }));
     await commit(ops("movs", movs)); S.movs.push(...movs);
   },
   async receive(supplier, items){
     items = items.filter(l => l.qty > 0);
-    const now = Date.now(), grupo = uid();
+    const now = LocalDB.now(), grupo = uid();
     const movs = items.map(l => ({ id:uid(), pid:l.pid, type:"compra", qty:l.qty, at:now, cost:l.cost, supplier, grupo }));
     const prods = items.map(l => Object.assign({}, P(l.pid), { cost:l.cost, has:true }));
     await commit([...ops("products", prods), ...ops("movs", movs)]);
@@ -372,7 +392,7 @@ const act = {
   // draft: { pid: { qty, est, none } }. Devuelve cuántos se contaron y las diferencias
   async count(draft){
     const diffs = [], movs = [], prods = []; let n = 0;
-    const now = Date.now();
+    const now = LocalDB.now();
     for (const [pid, d] of Object.entries(draft)){
       const p = Object.assign({}, P(pid));
       if (d.none === true){ p.has = false; prods.push(p); continue; }
@@ -397,7 +417,7 @@ const act = {
     if (f.barcode && S.products.some(o => o.barcode === f.barcode)) throw new Error("Ese código de barras ya está en otro producto");
     const p = { id:uid(), name:f.name, cat:f.cat, price:f.price, cost:Math.round(f.price*0.65), barcode:f.barcode, min:3, has:true, countQty:null, countAt:null, estimated:false };
     const movs = [];
-    if (qty !== ""){ p.countQty = Math.max(0, parseInt(qty,10)||0); p.countAt = Date.now(); movs.push({ id:uid(), pid:p.id, type:"conteo", qty:p.countQty, expected:null, at:p.countAt }); }
+    if (qty !== ""){ p.countQty = Math.max(0, parseInt(qty,10)||0); p.countAt = LocalDB.now(); movs.push({ id:uid(), pid:p.id, type:"conteo", qty:p.countQty, expected:null, at:p.countAt }); }
     await commit([...ops("products", [p]), ...ops("movs", movs)]);
     S.products.push(p); S.movs.push(...movs); return p;
   },
@@ -406,7 +426,7 @@ const act = {
     await commit(ops("clients", [clientRow(c)])); S.clients.push(c); return c;
   },
   async clientMov(c, type, amount, note){
-    const i = { id:uid(), type, amount, note, at:Date.now() };
+    const i = { id:uid(), type, amount, note, at:LocalDB.now() };
     await commit(ops("fiados", [fiadoRow(c, i)])); c.items.push(i);
   },
   async setting(clave, valor){
@@ -417,7 +437,7 @@ const act = {
     clearTimeout(act._pm); act._pm = setTimeout(() => act.setting("mensaje_pan", text).catch(e => toast(friendly(e))), 700);
   },
   async newReserva(name, detail){
-    const r = { id:uid(), name, detail, at:Date.now(), done:false };
+    const r = { id:uid(), name, detail, at:LocalDB.now(), done:false };
     await commit(ops("reservas", [r])); S.reservas.push(r); return r;
   },
   async reserva(r, done){
@@ -573,7 +593,14 @@ function renderTabs(){
 }
 function go(v){ ui.view = v; if (v !== "contar") ui.sector = null; render(); window.scrollTo(0,0); }
 function header(title, sub){ return `<header class="top"><h1 class="brandname">${esc(title)}<small>${esc(sub)}</small></h1>${netPill()}</header>`; }
-const netPill = () => navigator.onLine ? `<span class="net" title="Todo se guarda en este dispositivo"><i></i>Guardado aquí</span>` : `<span class="net off" title="Se sigue guardando en este dispositivo"><i></i>Sin internet · guardando aquí</span>`;
+function netPill(){
+  const st = Sync.state.status, pend = meta.pending;
+  if (st === "ok" || (st === "syncing" && !pend)) return `<span class="net" title="Todo está guardado aquí y en el servidor"><i></i>Sincronizado</span>`;
+  if (st === "syncing") return `<span class="net" title="Enviando cambios al servidor"><i></i>Sincronizando…</span>`;
+  if (st === "error") return `<span class="net off" title="${esc(Sync.state.error)}. Se sigue guardando aquí y se enviará después."><i></i>${navigator.onLine ? "Sin servidor" : "Sin internet"} · ${pend} por enviar</span>`;
+  return navigator.onLine ? `<span class="net" title="Todo se guarda en este dispositivo"><i></i>Guardado aquí</span>` : `<span class="net off" title="Se sigue guardando en este dispositivo"><i></i>Sin internet · guardando aquí</span>`;
+}
+const updateNet = () => document.querySelectorAll("header.top .net").forEach(el => el.outerHTML = netPill());
 
 function viewInicio(){
   const avail = S.products.filter(p => p.has);
@@ -906,11 +933,12 @@ function viewDatos(){
         <div class="item"><div class="main"><div class="name">Productos</div></div><div class="qty">${S.products.length}</div></div>
         <div class="item"><div class="main"><div class="name">Ventas, compras y conteos</div></div><div class="qty">${S.movs.length}</div></div>
         <div class="item"><div class="main"><div class="name">Clientes con fiado</div><div class="sub">${n(fiados, "movimiento", "movimientos")}</div></div><div class="qty">${S.clients.length}</div></div>
-        <div class="item"><div class="main"><div class="name">Cambios por enviar al servidor</div><div class="sub">${meta.demo ? "Los datos de ejemplo no se envían" : "Quedan guardados aquí hasta que exista el servidor"}</div></div><div class="qty">${meta.pending}</div></div>
+        <div class="item"><div class="main"><div class="name">Cambios por enviar al servidor</div><div class="sub">${meta.demo ? "Los datos de ejemplo no se envían" : meta.servidor ? "Se envían solos cuando hay conexión con el servidor" : "Quedan guardados aquí hasta que configures un servidor"}</div></div><div class="qty">${meta.pending}</div></div>
       </div>
       <p class="small muted" style="margin:0">${persisted === true ? "✓ El navegador no borrará estos datos aunque le falte espacio." : persisted === false ? "El navegador podría borrar estos datos si le falta espacio. Instalar la app y descargar respaldos lo evita." : ""}</p>
-      <p class="small muted" style="margin:0">Todo funciona sin internet. Por ahora los datos están solo en este dispositivo; cuando exista el servidor se juntarán con los de los otros celulares de la tienda.</p>
+      <p class="small muted" style="margin:0">Todo funciona sin internet. ${meta.servidor ? "Cuando hay conexión, los cambios se juntan con los de los otros dispositivos de la tienda." : "Por ahora los datos están solo en este dispositivo."}</p>
     </div>
+    ${meta.demo ? "" : syncCard()}
     <div class="card stack"><h3>Instalar</h3>${install}</div>
     <div class="card stack"><h3>Respaldo</h3>
       <p class="small muted" style="margin:0">Descarga una copia de todo en un archivo y guárdala en otro lugar (computador, Google Drive o WhatsApp a ti mismo). Conviene hacerlo una vez por semana.</p>
@@ -924,6 +952,28 @@ function viewDatos(){
     <p class="small muted" style="margin:0">Dispositivo ${esc(meta.device?.nombre || "")} · código ${esc(meta.device?.id || "")}</p>
   </div>`;
 }
+// Si la app la sirve el mismo servidor (PocketBase), el link apunta a él, para que sirva
+// desde otros dispositivos aunque aquí se haya abierto como "localhost"
+const inviteLink = () => { const u = sameOrigin ? new URL(meta.servidor + "/") : new URL(location.pathname, location.origin);
+  u.searchParams.set("unirse", meta.tienda.id); u.searchParams.set("servidor", meta.servidor); return u.href; };
+function syncCard(){
+  const st = Sync.state, on = !!meta.servidor;
+  const estado = !on ? "Sin servidor: los datos están solo en este dispositivo."
+    : st.status === "ok" ? `✓ Al día con el servidor${st.last ? " · " + ago(st.last) : ""}.`
+    : st.status === "syncing" ? "Sincronizando…"
+    : st.status === "error" ? `No se pudo conectar: ${esc(st.error)}. Los cambios se guardan aquí y se envían cuando vuelva la conexión.` : "";
+  return `<div class="card stack"><h3>Sincronización</h3>
+    <p class="small" style="margin:0">${estado}</p>
+    <div class="field"><label for="sserv">Dirección del servidor</label><div class="searchbar"><input class="input code" id="sserv" value="${esc(meta.servidor)}" placeholder="Ej: http://192.168.1.20:8090" autocapitalize="none" inputmode="url"><button class="btn" id="ssave">Guardar</button></div></div>
+    ${on ? `<button class="btn block" id="snow">Sincronizar ahora</button>
+    <div class="field"><label>Sumar otro celular o computador</label>
+      <p class="small muted" style="margin:0">Abre este link en el otro dispositivo (tiene que estar en el mismo wifi mientras el servidor esté en tu computador):</p>
+      <div class="code">${esc(inviteLink())}</div></div>
+    <div class="grid2"><a class="btn" style="text-align:center" href="${esc(waLink("", "Únete a " + (S.ajustes.tienda_nombre || "la tienda") + " en Mi Almacén: " + inviteLink()))}" ${WA_TARGET}>Enviar por WhatsApp</a><button class="btn" id="scopy">Copiar link</button></div>` : ""}
+    <p class="small muted" style="margin:0">Código de la tienda: <span class="code">${esc(meta.tienda?.id || "")}</span>. No lo compartas con personas ajenas: por ahora es la llave para entrar a los datos.</p>
+  </div>`;
+}
+
 async function downloadBackup(){
   const file = await LocalDB.exportAll();
   const url = URL.createObjectURL(new Blob([JSON.stringify(file)], { type:"application/json" }));
@@ -948,7 +998,7 @@ function confirmWipe(after){
     <div class="grid2"><button class="btn" data-close>Cancelar</button><button class="btn primary" id="dowipe">Borrar</button></div></div>`);
   $("#dowipe").onclick = () => run(async () => {
     if (!meta.demo && $("#wconf").value.trim().toUpperCase() !== "BORRAR") return $("#wconf").focus();
-    await LocalDB.wipe(); closeModal(); ui.view = "inicio"; ui.cart = []; ui.recv.items = []; ui.draft = {}; after(); });
+    Sync.stop(); await LocalDB.wipe(); closeModal(); ui.view = "inicio"; ui.cart = []; ui.recv.items = []; ui.draft = {}; after(); });
 }
 
 function viewMas(){
@@ -990,6 +1040,17 @@ function render(){
     $("#backup").onclick = () => run(downloadBackup);
     $("#restore").onchange = e => run(() => restoreBackup(e.target));
     $("#wipe").onclick = () => confirmWipe(showSetup);
+    if (!meta.demo){
+      $("#ssave").onclick = () => run(async () => {
+        const url = $("#sserv").value.trim().replace(/\/+$/, "");
+        if (url && !/^https?:\/\//.test(url)) return toast("Escribe la dirección completa, con http:// o https://");
+        if (url && !(await Sync.probe(url))) return toast("No se encontró el servidor en esa dirección");
+        meta.servidor = url; await LocalDB.setMeta("servidor", url);
+        if (url){ await LocalDB.setMeta("cursor", 0); Sync.start(url, meta.tienda.id); toast("Servidor guardado"); } else { Sync.stop(); toast("Sincronización desactivada"); }
+        render(); });
+      const sn = $("#snow"); if (sn) sn.onclick = () => run(async () => { await Sync.syncNow(); render(); toast(Sync.state.status === "ok" ? "Todo al día" : "No se pudo sincronizar"); });
+      const sc = $("#scopy"); if (sc) sc.onclick = () => { try { navigator.clipboard.writeText(inviteLink()).then(() => toast("Link copiado"), () => toast(inviteLink())); } catch(e){ toast(inviteLink()); } };
+    }
     const ib = $("#install"); if (ib) ib.onclick = async () => { const e = installEvt; installEvt = null; e.prompt(); await e.userChoice.catch(() => {}); render(); };
     if (persisted === null && navigator.storage?.persisted) navigator.storage.persisted().then(x => { persisted = x; if (ui.view === "datos") render(); }, () => {});
   }
@@ -1056,13 +1117,31 @@ function render(){
 function gate(html){ MODE = null; $("nav.tabs").hidden = true; $("#app").innerHTML = html; window.scrollTo(0,0); }
 const gateHead = () => `<header class="top"><h1 class="brandname">Mi Almacén<small>Inventario y ventas para tu negocio</small></h1></header>`;
 
+// Servidor que sirvió esta página (cuando la app se abre desde PocketBase), si existe
+let sameOrigin = null;
+async function localServer(){
+  // En GitHub Pages no hay servidor: no se pregunta
+  if (sameOrigin === null) sameOrigin = /^https?:$/.test(location.protocol) && !location.hostname.endsWith("github.io") && await Sync.probe(location.origin) ? location.origin : "";
+  return sameOrigin;
+}
+// Invitación: ?unirse=<código de la tienda>&servidor=<dirección>
+const invite = (() => { const q = new URLSearchParams(location.search); return q.get("unirse") ? { tienda:q.get("unirse"), servidor:q.get("servidor") || "" } : null; })();
+const clearInvite = () => { if (invite) history.replaceState(null, "", location.pathname); };
+
 async function openStore(){
   await loadLocal();
   if (!meta.tienda) return showSetup();
+  if (invite && invite.tienda !== meta.tienda.id) toast("Este dispositivo ya tiene otra tienda. Para unirte, primero borra sus datos en Más > Tienda y datos.");
+  clearInvite();
+  if (!meta.demo && !meta.servidor){ const o = await localServer(); if (o){ meta.servidor = o; await LocalDB.setMeta("servidor", o); } }
   MODE = "local"; $("nav.tabs").hidden = false; render();
+  if (!meta.demo && meta.servidor) Sync.start(meta.servidor, meta.tienda.id); else Sync.stop();
 }
+Sync.state.onStatus = () => { LocalDB.pendingCount().then(n => { meta.pending = n; if (MODE) updateNet(); }, () => {}); };
+Sync.state.onChange = async () => { await loadLocal(); if (MODE) softRender(); };
 
 function showSetup(){
+  if (invite) return showJoin(invite.servidor, invite.tienda);
   const st = { inicio:"catalogo" };
   gate(`${gateHead()}<div class="stack">
     <div class="card stack"><h2>Crea tu tienda</h2>
@@ -1076,6 +1155,7 @@ function showSetup(){
         </div></div>
       <button class="btn primary block" id="screate">Crear tienda</button>
     </div>
+    <button class="btn block" id="sjoin">Unirme a una tienda que ya existe</button>
     <button class="btn block" id="sdemo">Solo quiero probar con datos de ejemplo</button>
     <label class="btn ghost block filebtn">Tengo un respaldo: restaurarlo<input type="file" id="srestore" accept="application/json,.json"></label>
   </div>`);
@@ -1084,11 +1164,34 @@ function showSetup(){
     const nombre = $("#sn").value.trim(), persona = $("#sp").value.trim();
     if (!nombre){ $("#sn").focus(); return toast("Escribe el nombre de la tienda"); }
     $("#screate").disabled = true; $("#screate").textContent = "Creando…";
+    meta.servidor = await localServer();
     await createStore(nombre, persona, st.inicio).finally(() => { const b = $("#screate"); if (b){ b.disabled = false; b.textContent = "Crear tienda"; } });
     ui.view = "inicio"; await openStore(); toast(`${nombre} está lista`);
   });
-  $("#sdemo").onclick = () => run(async () => { await createStore("Almacén de ejemplo", "", "ejemplo"); ui.view = "inicio"; await openStore(); });
+  $("#sdemo").onclick = () => run(async () => { meta.servidor = ""; await createStore("Almacén de ejemplo", "", "ejemplo"); ui.view = "inicio"; await openStore(); });
+  $("#sjoin").onclick = () => run(async () => showJoin(await localServer(), ""));
   $("#srestore").onchange = e => run(() => restoreBackup(e.target));
+}
+
+function showJoin(servidor, tienda){
+  gate(`${gateHead()}<div class="stack">
+    <div class="card stack"><h2>Unirme a una tienda</h2>
+      <p class="small muted" style="margin:0">Este dispositivo va a descargar todos los datos de la tienda y desde ahí se mantiene al día con los demás. Lo más fácil es abrir el link de invitación que se comparte desde Más > Tienda y datos en el dispositivo de la tienda.</p>
+      <div class="field"><label for="jserv">Dirección del servidor</label><input class="input code" id="jserv" value="${esc(servidor || "")}" placeholder="Ej: http://192.168.1.20:8090" autocapitalize="none" inputmode="url"></div>
+      <div class="field"><label for="jcode">Código de la tienda</label><input class="input code" id="jcode" value="${esc(tienda || "")}" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" autocapitalize="none" autocomplete="off"></div>
+      <button class="btn primary block" id="jgo">Unirme y descargar los datos</button>
+    </div>
+    <button class="btn ghost block" id="jback">Volver</button>
+  </div>`);
+  $("#jback").onclick = () => { clearInvite(); location.reload(); };
+  $("#jgo").onclick = () => run(async () => {
+    const url = $("#jserv").value.trim().replace(/\/+$/, ""), code = $("#jcode").value.trim().toLowerCase();
+    if (!/^https?:\/\//.test(url)) return toast("Escribe la dirección completa del servidor, con http:// o https://");
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(code)) return toast("El código de la tienda no está completo");
+    const b = $("#jgo"); b.disabled = true; b.textContent = "Descargando datos…";
+    try { await joinStore(url, code); } catch(e){ await LocalDB.wipe().catch(() => {}); Sync.stop(); throw e; } finally { b.disabled = false; b.textContent = "Unirme y descargar los datos"; }
+    clearInvite(); ui.view = "inicio"; await openStore(); toast(`Listo: ${S.ajustes.tienda_nombre || "la tienda"} está en este dispositivo`);
+  });
 }
 
 // Indicador de conexión: la app no la necesita, pero así se ve que todo se guarda igual

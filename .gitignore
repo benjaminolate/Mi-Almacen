@@ -27,3 +27,9 @@ datos-reales/
 node_modules/
 dist/
 *.log
+
+# Servidor: el programa PocketBase y sus datos no se suben
+servidor/pocketbase
+servidor/pocketbase.exe
+pb_data/
+mi-almacen-datos/
