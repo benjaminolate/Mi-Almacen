@@ -160,6 +160,13 @@ nav.tabs button[aria-current="page"]{color:var(--brand)}
 .hdr-r{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
 .receipt{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;white-space:pre-wrap;background:var(--surface);border:1px dashed var(--line);border-radius:var(--r2);padding:12px;margin:0}
 .ext-g{margin:12px 0 0}
+.quick{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:8px}
+.quick button{padding:10px 8px;border:1px solid var(--line);background:var(--surface);border-radius:var(--r2);font-weight:700;font-size:14px;line-height:1.2}
+.quick button small{display:block;font-weight:500;font-size:12px;color:var(--muted)}
+.seg.wrap{grid-auto-flow:row;grid-template-columns:repeat(auto-fill,minmax(104px,1fr))}
+.hint{background:var(--accent-soft);border-radius:var(--r2);padding:8px 10px;font-size:13px;font-weight:600}
+:root[data-fuente="redondeada"]{--font-display:"Nunito","Figtree",system-ui,sans-serif;--font-body:"Nunito","Figtree",system-ui,sans-serif}
+:root[data-fuente="legible"]{--font-display:"Atkinson Hyperlegible",system-ui,sans-serif;--font-body:"Atkinson Hyperlegible",system-ui,sans-serif}
 @media (max-width:380px){.kpi .num{font-size:24px}.grid2{grid-template-columns:1fr}}
 @media (prefers-reduced-motion:no-preference){.sheet{animation:up .18s ease-out}@keyframes up{from{transform:translateY(24px);opacity:.6}}}
 </style>
@@ -187,10 +194,16 @@ const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt
 const clp = n => "$" + Math.round(n).toLocaleString("es-CL");
 const uid = () => LocalDB.uuid();
 
-const SECTORS = ["Bebidas","Jugos","Lácteos","Abarrotes","Legumbres","Galletas","Conservas","Snacks","Aseo"];
+const SECTORS = ["Pan","Verduras","Bebidas","Jugos","Lácteos","Abarrotes","Legumbres","Galletas","Conservas","Snacks","Aseo"];
 
-// Catálogo precargado típico de almacén: [nombre, sector, precio venta, costo, popularidad 0-3]
+// Catálogo precargado típico de almacén: [nombre, sector, precio venta, costo, popularidad 0-3, extras]
+// El pan y las verduras van por kilo (precio por kilo); cada tipo de pan se puede cambiar a "por unidad" en Tipos de pan
+const KG = { kg:true }, PAN = { kg:true, atajo:true };
 const CATALOG = [
+ ["Marraqueta","Pan",2190,1450,3,PAN],["Hallulla","Pan",2190,1450,3,PAN],["Pan amasado","Pan",2490,1650,2,PAN],
+ ["Dobladitas","Pan",2490,1650,1,KG],["Pan integral","Pan",2690,1800,1,KG],
+ ["Tomate","Verduras",1990,1300,2,KG],["Papa","Verduras",1290,800,2,KG],["Cebolla","Verduras",1190,750,2,KG],["Zanahoria","Verduras",990,600,1,KG],
+ ["Palta","Verduras",4990,3500,2,KG],["Limón","Verduras",1990,1250,1,KG],["Plátano","Verduras",1490,950,1,KG],["Lechuga","Verduras",990,600,1],
  ["Coca-Cola 1,5 L","Bebidas",1990,1300,3],["Coca-Cola 3 L","Bebidas",2990,2050,2],["Coca-Cola Zero 1,5 L","Bebidas",1990,1300,1],
  ["Sprite 1,5 L","Bebidas",1790,1150,1],["Fanta 1,5 L","Bebidas",1790,1150,1],["Pepsi 1,5 L","Bebidas",1690,1080,1],
  ["Bilz 1,5 L","Bebidas",1590,1000,1],["Pap 1,5 L","Bebidas",1590,1000,1],["Agua mineral sin gas 1,6 L","Bebidas",990,560,2],
@@ -222,9 +235,10 @@ function atDay(daysAgo, hour, min){ const d = new Date(Date.now() - daysAgo*D); 
 
 function buildSeed(){
   const r = rng(42);
-  const products = CATALOG.map((c, i) => ({ id:uid(), name:c[0], cat:c[1], price:c[2], cost:c[3], pop:c[4],
-    barcode: i < 3 ? ["7800000000011","7800000000028","7800000000035"][i] : "", min: c[4] >= 2 ? 6 : 3,
-    has:true, countQty:null, countAt:null, estimated:false }));
+  const codes = { "Coca-Cola 1,5 L":"7800000000011", "Coca-Cola 3 L":"7800000000028", "Coca-Cola Zero 1,5 L":"7800000000035" };
+  const products = CATALOG.map(c => Object.assign({ id:uid(), name:c[0], cat:c[1], price:c[2], cost:c[3], pop:c[4],
+    barcode: codes[c[0]] || "", min: c[5]?.kg ? (c[4] >= 2 ? 5 : 2) : c[4] >= 2 ? 6 : 3,
+    has:true, countQty:null, countAt:null, estimated:false }, c[5] || {}));
   const byName = n => products.find(p => p.name === n);
   byName("Agua mineral con gas 1,6 L").has = false;
   byName("Arvejas partidas 500 g").has = false;
@@ -239,13 +253,13 @@ function buildSeed(){
       while (k-- > 0){
         const t = atDay(d, 9 + Math.floor(r()*12), Math.floor(r()*60));
         if (t > now - 5*60e3) continue;
-        movs.push({ id:uid(), pid:p.id, type:"venta", qty: r() < 0.2 ? 2 : 1, at:t, price:p.price });
+        movs.push({ id:uid(), pid:p.id, type:"venta", qty: p.kg ? r3(0.25 + Math.round(r()*5)/4) : r() < 0.2 ? 2 : 1, at:t, price:p.price });
       }
     }
   }
   // Conteos ya hechos: Bebidas hace 3 días, Lácteos hace 2, Galletas ayer (al cierre)
   const counts = { "Bebidas":[3,20,30], "Lácteos":[2,20,15], "Galletas":[1,20,40] };
-  const qtys = { "Coca-Cola 1,5 L":30,"Coca-Cola 3 L":12,"Coca-Cola Zero 1,5 L":9,"Sprite 1,5 L":10,"Fanta 1,5 L":8,"Pepsi 1,5 L":6,"Bilz 1,5 L":7,"Pap 1,5 L":6,"Agua mineral sin gas 1,6 L":18,
+  const qtys = { "Coca-Cola 1,5 L":30,"Coca-Cola 3 L":12,"Coca-Cola Zero 1,5 L":9,"Sprite 1,5 L":3,"Fanta 1,5 L":2,"Pepsi 1,5 L":6,"Bilz 1,5 L":7,"Pap 1,5 L":6,"Agua mineral sin gas 1,6 L":18,
     "Leche entera 1 L":16,"Leche descremada 1 L":6,"Yogur batido 125 g":14,"Mantequilla 250 g":5,"Queso laminado 250 g":4,
     "Galletas de agua":15,"Galletas de soda":13,"Galletas rellenas chocolate":22,"Galletas rellenas vainilla":16,"Galletas de vino":8 };
   for (const [cat,[d,h,m]] of Object.entries(counts)){
@@ -449,7 +463,7 @@ const act = {
       prov = S.proveedores.find(x => x.nombre.trim().toLowerCase() === supplier.toLowerCase());
       if (!prov){ prov = { id:uid(), nombre:supplier, telefono:"", dias:[], nota:"" }; extra.push(["proveedores", prov]); }
     }
-    const movs = items.map(l => withWho({ id:uid(), pid:l.pid, type:"compra", qty:l.qty, at:now, cost:l.cost, supplier, grupo }));
+    const movs = items.map(l => withWho(Object.assign({ id:uid(), pid:l.pid, type:"compra", qty:l.qty, at:now, cost:l.cost, supplier, grupo }, ext("vencimientos") && l.vence ? { vence:l.vence } : {})));
     const prods = items.map(l => Object.assign({}, P(l.pid), { cost:l.cost, has:true }, prov && !P(l.pid).prov ? { prov:prov.id } : {}));
     if (ext("vencimientos")) items.filter(l => l.vence).forEach(l => extra.push(["vencimientos", { id:uid(), pid:l.pid, fecha:l.vence, qty:l.qty, done:false, at:now }]));
     const total = Math.round(items.reduce((a, l) => a + l.qty * l.cost, 0));
@@ -517,6 +531,8 @@ const act = {
   async put(store, rows){ await commit(ops(store, rows)); upsert(store, rows); return rows[0]; },
   async del(store, id){ await commit([{ store, del:id }]); S[store] = S[store].filter(x => x.id !== id); }
 };
+// Si un producto pasa de unidades a kilos (o al revés), su stock contado ya no sirve: queda sin contar
+const cambioUnidad = (p, kg) => kg == null || !!kg === !!p.kg ? {} : { countQty:null, countAt:null, estimated:false };
 function upsert(store, rows){ for (const r of rows){ const a = S[store], i = a.findIndex(x => x.id === r.id); if (i >= 0) a[i] = r; else a.push(r); } }
 // ---------- Escaneo de códigos de barras ----------
 async function decodeFile(file){
@@ -669,9 +685,9 @@ const ICONS = {
   encargos:'<svg viewBox="0 0 24 24"><path d="M4 8l8-4 8 4v8l-8 4-8-4z"/><path d="M4 8l8 4 8-4M12 12v8M8 6l8 4"/></svg>'
 };
 const LABELS = { inicio:"Inicio", vender:"Vender", contar:"Contar", productos:"Productos", fiados:"Fiados", mas:"Más" };
-const IN_MAS = ["mas","recibir","historial","reservas","datos","extensiones","apariencia","compras","vencimientos","proveedores","caja","ofertas","personas","encargos"];
+const IN_MAS = ["mas","recibir","historial","reservas","tipospan","datos","extensiones","apariencia","compras","vencimientos","proveedores","caja","ofertas","personas","encargos"];
 // Pantallas que dependen de una extensión
-const VIEW_EXT = { contar:"contar", fiados:"fiados", recibir:"recibir", reservas:"pan", compras:"compras", vencimientos:"vencimientos", proveedores:"proveedores",
+const VIEW_EXT = { contar:"contar", fiados:"fiados", recibir:"recibir", reservas:"pan", tipospan:"pan", compras:"compras", vencimientos:"vencimientos", proveedores:"proveedores",
   caja:"caja", ofertas:"ofertas", personas:"personas", encargos:"encargos" };
 function renderTabs(){
   const tabs = Object.keys(LABELS).filter(k => !VIEW_EXT[k] || ext(VIEW_EXT[k]));
@@ -679,9 +695,19 @@ function renderTabs(){
   $("#tabs").innerHTML = tabs.map(k => `<button data-view="${k}" ${ui.view===k || (k==="mas" && IN_MAS.includes(ui.view))?'aria-current="page"':''}>${ICONS[k]}<span>${LABELS[k]}</span></button>`).join("");
   document.querySelectorAll("#tabs [data-view]").forEach(b => b.onclick = () => go(b.dataset.view));
 }
-function go(v){ ui.view = v; if (v !== "contar") ui.sector = null; render(); window.scrollTo(0,0); }
-function header(title, sub){ return `<header class="top"><h1 class="brandname">${esc(title)}<small>${esc(sub)}</small></h1><div class="hdr-r">${whoChip()}${netPill()}</div></header>`; }
+// Cada pantalla queda en el historial del navegador: el botón atrás del celular vuelve a la anterior
+function go(v){ ui.view = v; if (v !== "contar") ui.sector = null; pushNav(); render(); window.scrollTo(0,0); }
+const pushNav = () => { if (MODE) history.pushState({ v:ui.view, sector:ui.sector, n:(history.state?.n || 0) + 1 }, ""); };
+function back(){ if (history.state?.n > 0) history.back(); else go(IN_MAS.includes(ui.view) ? "mas" : "inicio"); }
+window.addEventListener("popstate", e => {
+  if (!MODE) return;
+  // Si hay una ventana abierta, atrás la cierra y se queda en la misma pantalla
+  if (document.querySelector(".overlay")){ closeModal(); history.pushState({ v:ui.view, sector:ui.sector, n:(e.state?.n || 0) + 1 }, ""); return; }
+  ui.view = e.state?.v || "inicio"; ui.sector = e.state?.sector || null; render(); window.scrollTo(0,0);
+});
+function header(title, sub){ return `${IN_MAS.includes(ui.view) && ui.view !== "mas" ? backBtn() : ""}<header class="top"><h1 class="brandname">${esc(title)}<small>${esc(sub)}</small></h1><div class="hdr-r">${whoChip()}${netPill()}</div></header>`; }
 // Botón con el nombre de quien atiende (extensión "Quién atiende")
+const backBtn = () => `<div style="padding-top:12px"><button class="btn sm" data-back>← Regresar</button></div>`;
 const whoChip = () => ext("personas") && personasActivas().length ? `<button class="chip" data-go="personas" title="Cambiar quién atiende">${esc(nombrePersona(quien()) || "¿Quién atiende?")}</button>` : "";
 function netPill(){
   const st = Sync.state.status, pend = meta.pending;
@@ -702,7 +728,7 @@ function viewInicio(){
   const low = counted.map(p => [p, stockOf(p)]).filter(([p,s]) => s <= p.min).sort((a,b)=>a[1]-b[1]);
   const week = {}; S.movs.filter(m => m.type==="venta" && m.at > Date.now()-7*D).forEach(m => week[m.pid] = (week[m.pid]||0) + m.qty);
   const top = Object.entries(week).filter(([id]) => P(id)).sort((a,b)=>b[1]-a[1]).slice(0,5);
-  const sectorState = SECTORS.map(c => { const ps = avail.filter(p => p.cat===c); const done = ps.length && ps.every(p => p.countAt!=null); return `<span class="pill ${done?"ok":"none"}">${done?"✓ ":""}${esc(c)}</span>`; }).join(" ");
+  const sectorState = SECTORS.filter(c => avail.some(p => p.cat === c)).map(c => { const ps = avail.filter(p => p.cat===c); const done = ps.length && ps.every(p => p.countAt!=null); return `<span class="pill ${done?"ok":"none"}">${done?"✓ ":""}${esc(c)}</span>`; }).join(" ");
   const resPend = S.reservas.filter(r => !r.done && r.at >= resCutoff());
   const pct0 = avail.length ? pct : 0;
   return `${header(S.ajustes.tienda_nombre || "Mi Almacén", meta.demo ? "Datos de ejemplo" : "Inventario y ventas")}
@@ -748,8 +774,10 @@ function searchResults(q, onPick, opts){
 function viewVender(){
   const pr = pricing(ui.cart), caja = ext("caja");
   const last = ui.lastSale && ext("comprobante") ? `<div class="card spread"><div><div style="font-weight:700">Venta registrada: ${clp(ui.lastSale.total)}</div><div class="small muted">${ago(ui.lastSale.at)}</div></div><button class="btn sm" id="lastrec">Comprobante</button></div>` : "";
+  const quick = S.products.filter(p => p.atajo && p.has && (p.cat !== "Pan" || ext("pan")));
   return `${header("Vender", "Registrar una venta")}
   <div class="stack">
+    ${quick.length ? `<div class="quick">${quick.map(p => `<button data-quick="${p.id}">${esc(p.name)}<small>${clp(p.price)}${p.kg ? " el kilo" : ""}</small></button>`).join("")}</div>` : ""}
     <div class="searchbar"><input class="input" id="q" placeholder="Buscar producto, ej: coca" autocomplete="off"><button class="btn accent" id="scan">Escanear</button></div>
     <div class="list card" id="res" style="padding-block:0" hidden></div>
     <div class="card">
@@ -759,6 +787,7 @@ function viewVender(){
           : `<div class="stepper"><button data-dec="${i}" aria-label="Quitar uno">−</button><span>${l.qty}</span><button data-inc="${i}" aria-label="Agregar uno">+</button></div>`}<div style="font-weight:700;min-width:6ch;text-align:right">${clp(l.bruto - l.desc)}</div></div>`; }).join("")
         : `<div class="empty">Busca o escanea un producto para agregarlo.</div>`}
       ${pr.aplicadas.map(a => `<div class="spread small" style="padding-top:8px;color:var(--ok);font-weight:600"><span>${esc(a.nombre)}</span><span>−${clp(a.ahorro)}</span></div>`).join("")}
+      ${pr.avisos.map(a => `<div class="hint" style="margin-top:8px">${esc(a)}</div>`).join("")}
       <div class="spread" style="padding-top:12px"><span class="muted">Total</span><span class="total">${clp(pr.total)}</span></div>
     </div>
     ${caja && ui.cart.length ? `<div class="card stack"><h3>¿Cómo paga?</h3>
@@ -780,7 +809,8 @@ function viewRecibir(){
   return `${header("Recibir mercadería", "Lo que llega del proveedor")}
   <div class="stack">
     <div class="field"><label for="sup">Proveedor</label><input class="input" id="sup" value="${esc(ui.recv.supplier)}" ${ext("proveedores") ? `list="provlist" autocomplete="off"` : ""}>
-      ${ext("proveedores") ? `<datalist id="provlist">${S.proveedores.map(x => `<option value="${esc(x.nombre)}">`).join("")}</datalist>` : ""}</div>
+      ${ext("proveedores") ? `<datalist id="provlist">${S.proveedores.map(x => `<option value="${esc(x.nombre)}">`).join("")}</datalist>` : ""}
+      ${ext("proveedores") && S.proveedores.length ? `<div class="chips" style="flex-wrap:wrap;padding-top:4px">${S.proveedores.slice().sort((a, b) => a.nombre.localeCompare(b.nombre, "es")).map(x => `<button class="chip" data-sup="${esc(x.nombre)}" aria-pressed="${ui.recv.supplier.trim().toLowerCase() === x.nombre.trim().toLowerCase()}">${esc(x.nombre)}</button>`).join("")}</div>` : ""}</div>
     <div class="searchbar"><input class="input" id="q" placeholder="Buscar producto recibido" autocomplete="off"><button class="btn accent" id="scan">Escanear</button></div>
     <div class="list card" id="res" style="padding-block:0" hidden></div>
     <div class="card">
@@ -804,7 +834,7 @@ function viewContar(){
     return `${header("Contar sector", "Carga del stock, un sector a la vez")}
     <div class="stack">
       <p class="muted" style="margin:0">Elige el sector que vas a contar ahora. Lo ideal es contar al abrir o al cerrar, unos 20 a 30 minutos por sector.</p>
-      ${SECTORS.map(c => { const ps = S.products.filter(p => p.cat===c && p.has); const done = ps.filter(p => p.countAt!=null);
+      ${SECTORS.filter(c => S.products.some(p => p.cat === c && p.has)).map(c => { const ps = S.products.filter(p => p.cat===c && p.has); const done = ps.filter(p => p.countAt!=null);
         const last = done.length ? Math.max(...done.map(p=>p.countAt)) : null;
         const sold = ps.filter(p => p.countAt==null).reduce((a,p)=>a+pendingSales(p),0);
         return `<button class="sector" data-sector="${esc(c)}"><span class="name">${esc(c)}</span>
@@ -865,6 +895,7 @@ function openProduct(p){
     <div class="field"><label for="en">Nombre</label><input class="input" id="en" value="${esc(p.name)}"></div>
     ${ext("proveedores") ? `<div class="field"><label for="eprov">Proveedor</label><select class="input" id="eprov"><option value="">Sin proveedor</option>${S.proveedores.map(x => `<option value="${x.id}" ${p.prov === x.id ? "selected" : ""}>${esc(x.nombre)}</option>`).join("")}</select></div>` : ""}
     ${ext("granel") || p.kg ? `<label class="row small"><input type="checkbox" id="ekg" ${p.kg ? "checked" : ""}> Se vende por kilo (a granel)</label>` : ""}
+    <label class="row small"><input type="checkbox" id="eat" ${p.atajo ? "checked" : ""}> Botón rápido en Vender</label>
     <button class="btn primary block" id="esave">Guardar cambios</button>
     ${ext("vencimientos") ? `<button class="btn block" id="evenc">Anotar vencimiento</button>` : ""}
     <div><h3>Últimos movimientos</h3><div class="list" id="phist">${hist.map(movRow).join("") || `<div class="empty">Sin movimientos.</div>`}</div></div>
@@ -873,6 +904,8 @@ function openProduct(p){
     const f = { price:+$("#ep").value||0, cost:+$("#ec").value||0, min:num($("#em").value), barcode:$("#eb").value.trim(), name:$("#en").value.trim() || p.name };
     if ($("#eprov")) f.prov = $("#eprov").value;
     if ($("#ekg")) f.kg = $("#ekg").checked;
+    f.atajo = $("#eat").checked;
+    Object.assign(f, cambioUnidad(p, f.kg));
     await act.updateProduct(p, f);
     closeModal(); toast("Producto actualizado"); render(); });
   const ev = $("#evenc"); if (ev) ev.onclick = () => { closeModal(); ui.venc = { pid:p.id }; go("vencimientos"); };
@@ -907,7 +940,7 @@ function movRow(m){
     const inner = `<div class="main"><div class="name">${nm}</div><div class="sub">Venta · ${ago(m.at)}${who}${extra}</div></div><span class="diff" style="color:var(--bad)">−${fq(p, m.qty)}</span>`;
     return ext("comprobante") ? `<button class="item tap" data-rec="${esc(m.grupo || m.id)}" title="Ver comprobante">${inner}</button>` : `<div class="item">${inner}</div>`;
   }
-  if (m.type === "compra") return `<div class="item"><div class="main"><div class="name">${nm}</div><div class="sub">Compra${m.supplier?" a "+esc(m.supplier):""} · ${ago(m.at)}${who}</div></div><span class="diff" style="color:var(--ok)">+${fq(p, m.qty)}</span></div>`;
+  if (m.type === "compra") return `<div class="item"><div class="main"><div class="name">${nm}</div><div class="sub">Compra${m.supplier?" a "+esc(m.supplier):""} · ${ago(m.at)}${who}${m.vence ? " · vence " + esc(fdate(m.vence)) : ""}</div></div><span class="diff" style="color:var(--ok)">+${fq(p, m.qty)}</span></div>`;
   const d = m.expected != null && m.expected !== m.qty ? ` · esperaba ${fq(p, m.expected)}` : "";
   return `<div class="item"><div class="main"><div class="name">${nm}</div><div class="sub">Conteo${d} · ${ago(m.at)}${who}</div></div><span class="pill ok">= ${fq(p, m.qty)}</span></div>`;
 }
@@ -999,17 +1032,18 @@ function openPan(){
 }
 
 // ---------- Reservas (vista previa) ----------
-const BREADS = ["Marraquetas","Hallullas","Pan amasado","Dobladitas","Pan integral"];
+// Los panes que se pueden reservar son los productos del sector Pan marcados así en Tipos de pan
+const panesReserva = () => S.products.filter(p => p.cat === "Pan" && p.has && p.reserva !== false).sort((a, b) => a.name.localeCompare(b.name, "es"));
 function resCutoff(){ const d = new Date(); d.setHours(RES_CUT_HOUR,0,0,0); if (d.getTime() > Date.now()) d.setDate(d.getDate()-1); return d.getTime(); }
 // Las reservas viejas se sacan de la vista y de este dispositivo (sin enviarlo como cambio)
 function purgeReservas(){ const cut = resCutoff(), old = S.reservas.filter(r => !r.at || r.at < cut); if (!old.length) return;
   S.reservas = S.reservas.filter(r => r.at && r.at >= cut); LocalDB.apply(old.map(r => ({ store:"reservas", del:r.id, local:true }))).catch(() => {}); }
-const resDetail = q => BREADS.filter(b => q[b] > 0).map(b => `${q[b]} ${b.toLowerCase()}`).join(", ");
+const resDetail = q => panesReserva().filter(p => q[p.id] > 0).map(p => `${fq(p, q[p.id])} ${p.name.toLowerCase()}`).join(", ");
 function viewReservas(){
   const rs = S.reservas.slice().sort((a,b) => (a.at||0) - (b.at||0));
   const q = ui.resQty || (ui.resQty = {});
   const pend = rs.filter(r => !r.done).length;
-  return `<header class="top"><button class="btn sm" data-go="mas">← Más</button>${netPill()}</header>
+  return `<header class="top"><button class="btn sm" data-back>← Regresar</button>${netPill()}</header>
   <div class="stack">
     <div><h2>Reservas de pan de hoy</h2><p class="small muted" style="margin:4px 0 0">${pend} por entregar. Toca una reserva para marcarla como entregada. La lista se borra sola cada noche a las ${RES_CUT_HOUR}:00.</p></div>
     <div class="card" style="padding-block:0"><div class="list">${rs.length ? "" : `<div class="empty">Todavía no hay reservas hoy.</div>`}${rs.map(r => `<button class="item tap" data-res="${r.id}"><div class="main"><div class="name">${esc(r.name)}</div><div class="sub">${esc(r.detail)}${r.at ? " · reservó " + ago(r.at) : ""}</div></div>
@@ -1019,8 +1053,8 @@ function viewReservas(){
       <p class="small muted" style="margin:0">Para cuando un cliente pide pan por teléfono o WhatsApp.</p>
       <div class="field"><label for="rn">Nombre del cliente</label><input class="input" id="rn" placeholder="Ej: Ana Torres"></div>
       <div class="field"><label>¿Qué pan quieres?</label>
-        <div class="list">${BREADS.map(b => `<div class="item"><div class="main"><div class="name">${esc(b)}</div></div>
-          <div class="stepper"><button data-bdec="${esc(b)}" aria-label="Quitar ${esc(b)}">−</button><span>${q[b]||0}</span><button data-binc="${esc(b)}" aria-label="Agregar ${esc(b)}">+</button></div></div>`).join("")}</div></div>
+        <div class="list">${panesReserva().map(p => `<div class="item"><div class="main"><div class="name">${esc(p.name)}</div><div class="sub">${p.kg ? "por kilo, de a ½" : "por unidad"}</div></div>
+          <div class="stepper"><button data-bdec="${p.id}" aria-label="Quitar ${esc(p.name)}">−</button><span style="min-width:3.5ch">${p.kg ? fq(p, q[p.id] || 0) : q[p.id] || 0}</span><button data-binc="${p.id}" aria-label="Agregar ${esc(p.name)}">+</button></div></div>`).join("") || `<div class="empty">No hay panes para reservar. Agrégalos en Más &gt; Tipos de pan.</div>`}</div></div>
       <button class="btn accent block" id="rsave" ${Object.values(q).some(n => n > 0) ? "" : "disabled"}>Anotar reserva${Object.values(q).some(n => n > 0) ? " (" + resDetail(q) + ")" : ""}</button>
       <p class="small muted" style="margin:0">Más adelante los clientes podrán reservar solos desde un link que se comparte en el grupo de WhatsApp.</p>
     </div>
@@ -1098,7 +1132,8 @@ function openPeso(p, cur, cb){
     <p class="small muted" style="margin:0">${clp(p.price)} el kilo</p>
     <div class="seg" role="group"><button data-pm="g" aria-pressed="true">Gramos</button><button data-pm="kg" aria-pressed="false">Kilos</button><button data-pm="$" aria-pressed="false">Por monto</button></div>
     <input class="input" id="pval" type="number" min="0" step="any" inputmode="decimal" placeholder="Ej: 350" value="${cur ? r3(cur * 1000) : ""}" style="font-size:22px;font-weight:700;text-align:center">
-    <div class="row"><button class="btn sm" data-pq="0.25">¼ kilo</button><button class="btn sm" data-pq="0.5">½ kilo</button><button class="btn sm" data-pq="1">1 kilo</button></div>
+    <div class="row"><button class="btn sm" data-pq="0.25">¼ kilo</button><button class="btn sm" data-pq="0.5">½ kilo</button><button class="btn sm" data-pq="1">1 kilo</button>
+      <button class="btn sm" data-pp="500">$500</button><button class="btn sm" data-pp="1000">$1.000</button><button class="btn sm" data-pp="2000">$2.000</button></div>
     <div class="total" id="pprev" style="text-align:center;min-height:1.3em"></div>
     <button class="btn primary block" id="pok">${cur ? "Cambiar" : "Agregar a la venta"}</button>
   </div>`);
@@ -1108,6 +1143,8 @@ function openPeso(p, cur, cb){
   document.querySelectorAll("[data-pm]").forEach(b => b.onclick = () => { const k = kg(); modo = b.dataset.pm;
     document.querySelectorAll("[data-pm]").forEach(x => x.setAttribute("aria-pressed", x === b)); const i = $("#pval"); i.placeholder = ph[modo];
     if (k > 0) i.value = modo === "g" ? r3(k * 1000) : modo === "kg" ? k : Math.round(k * p.price); upd(); i.focus(); });
+  document.querySelectorAll("[data-pp]").forEach(b => b.onclick = () => { modo = "$"; document.querySelectorAll("[data-pm]").forEach(x => x.setAttribute("aria-pressed", x.dataset.pm === "$"));
+    $("#pval").placeholder = ph.$; $("#pval").value = b.dataset.pp; upd(); });
   document.querySelectorAll("[data-pq]").forEach(b => b.onclick = () => { const k = +b.dataset.pq; $("#pval").value = modo === "g" ? k * 1000 : modo === "kg" ? k : Math.round(k * p.price); upd(); });
   const ok = () => { const k = kg(); if (k <= 0) return $("#pval").focus(); cb(k); };
   $("#pval").oninput = upd; $("#pval").onkeydown = e => { if (e.key === "Enter") ok(); };
@@ -1127,7 +1164,7 @@ function ofertaVigente(o, t = new Date()){
 // los descuentos en %, solo en lo que no entró en un pack.
 function pricing(cart){
   const lines = cart.map(l => { const p = P(l.pid); return { pid:l.pid, qty:l.qty, unit:p.price, bruto:Math.round(l.qty * p.price), desc:0 }; });
-  const aplicadas = [];
+  const aplicadas = [], avisos = [];
   if (ext("ofertas")){
     const vig = S.ofertas.filter(o => ofertaVigente(o));
     for (const o of vig.filter(o => o.tipo === "pack" && o.n >= 2 && o.precio > 0 && o.pids?.length)){
@@ -1141,6 +1178,8 @@ function pricing(cart){
         g.forEach(x => x.desc += save * x.unit / sum); ahorro += save;
       }
       if (ahorro > 0) aplicadas.push({ nombre:o.nombre, ahorro:Math.round(ahorro) });
+      const resto = units.length % o.n;
+      if (resto) avisos.push(`Lleva ${o.n - resto} más para completar "${o.nombre}" (${o.n} por ${clp(o.precio)}).`);
     }
     const enPack = new Set(lines.filter(x => x.desc > 0));
     for (const o of vig.filter(o => o.tipo === "descuento" && o.pct > 0)){
@@ -1151,7 +1190,7 @@ function pricing(cart){
   }
   lines.forEach(x => x.desc = Math.min(x.bruto, Math.round(x.desc)));
   const subtotal = lines.reduce((a, x) => a + x.bruto, 0), descuento = lines.reduce((a, x) => a + x.desc, 0);
-  return { lines, subtotal, descuento, total:subtotal - descuento, aplicadas };
+  return { lines, subtotal, descuento, total:subtotal - descuento, aplicadas, avisos };
 }
 function ofertaDesc(o){
   const prods = (o.pids || []).map(id => P(id)?.name).filter(Boolean);
@@ -1177,9 +1216,14 @@ function bindOfertas(app){
   app.querySelectorAll("[data-ofon]").forEach(i => i.onchange = () => run(async () => { const o = S.ofertas.find(x => x.id === i.dataset.ofon);
     await act.put("ofertas", [Object.assign({}, o, { activa:i.checked })]); rerender(); }));
 }
-function openOferta(o){
+function openOferta(o, preset){
   const nuevo = !o;
-  const d = o ? JSON.parse(JSON.stringify(o)) : { id:uid(), nombre:"", tipo:"pack", n:3, precio:"", pct:10, pids:[], dias:[], desde:"", hasta:"", activa:true };
+  const d = o ? JSON.parse(JSON.stringify(o)) : Object.assign({ id:uid(), nombre:"", tipo:"pack", n:3, precio:"", pct:10, pids:[], dias:[], desde:"", hasta:"", activa:true }, preset || {});
+  // Cuánto ahorra el cliente, tomando el precio normal del primer producto elegido
+  const ahorroTxt = () => { const p = P(d.pids[0]); if (!p) return "";
+    if (d.tipo === "pack"){ const normal = p.price * (d.n || 0), pk = Math.round(+d.precio || 0); if (!pk || d.n < 2) return "";
+      return pk < normal ? `Precio normal de ${d.n}: ${clp(normal)}. El cliente ahorra ${clp(normal - pk)}.` : `Ojo: ${d.n} de ${p.name} cuestan ${clp(normal)} sin oferta.`; }
+    return d.pct > 0 ? `${p.name}: de ${clp(p.price)} queda en ${clp(p.price * (1 - Math.min(100, d.pct) / 100))}${p.kg ? " el kilo" : ""}.` : ""; };
   const keep = () => { d.nombre = $("#ofn").value; if ($("#ofq")){ d.n = Math.round(+$("#ofq").value || 0); d.precio = $("#ofp").value; } if ($("#ofpct")) d.pct = +$("#ofpct").value || 0;
     d.desde = $("#ofd1").value; d.hasta = $("#ofd2").value; };
   const draw = () => {
@@ -1197,10 +1241,12 @@ function openOferta(o){
       <div class="field"><label>Días (si no eliges ninguno, todos los días)</label><div class="chips" style="flex-wrap:wrap">${ORDEN_DIAS.map(n => `<button class="chip" data-ofd="${n}" aria-pressed="${d.dias.includes(n)}">${DIAS[n]}</button>`).join("")}</div></div>
       <div class="grid2"><div class="field"><label for="ofd1">Desde la hora (opcional)</label><input class="input" type="time" id="ofd1" value="${esc(d.desde)}"></div>
         <div class="field"><label for="ofd2">Hasta la hora</label><input class="input" type="time" id="ofd2" value="${esc(d.hasta)}"></div></div>
+      <div class="hint" id="ofah" ${ahorroTxt() ? "" : "hidden"}>${esc(ahorroTxt())}</div>
       <button class="btn primary block" id="ofsave">Guardar oferta</button>
       ${nuevo ? "" : `<button class="btn ghost block" id="ofdel" style="color:var(--bad)">Borrar oferta</button>`}
     </div>`);
     document.querySelectorAll("[data-oft]").forEach(b => b.onclick = () => { keep(); d.tipo = b.dataset.oft; draw(); });
+    ["#ofq","#ofp","#ofpct"].forEach(id => { const i = $(id); if (i) i.oninput = () => { keep(); const t = ahorroTxt(), h = $("#ofah"); h.textContent = t; h.hidden = !t; }; });
     document.querySelectorAll("[data-ofx]").forEach(b => b.onclick = () => { keep(); d.pids = d.pids.filter(x => x !== b.dataset.ofx); draw(); });
     document.querySelectorAll("[data-ofd]").forEach(b => b.onclick = () => { const n = +b.dataset.ofd; d.dias = d.dias.includes(n) ? d.dias.filter(x => x !== n) : [...d.dias, n]; b.setAttribute("aria-pressed", d.dias.includes(n)); });
     bindSearch(p => { keep(); if (!d.pids.includes(p.id)) d.pids.push(p.id); draw(); $("#oq").focus(); }, "#oq", "#ores", { all:true });
@@ -1326,11 +1372,11 @@ function viewVencimientos(){
   const sec = [["Vencidos", n => n < 0], ["Esta semana", n => n >= 0 && n <= 7], ["Este mes", n => n > 7 && n <= 31], ["Más adelante", n => n > 31]];
   const d = ui.venc;
   const row = v => { const p = P(v.pid), n = daysTo(v.fecha); return `<div class="item"><div class="main"><div class="name">${esc(p.name)}</div><div class="sub">${esc(fdate(v.fecha))}${v.qty ? " · " + fq(p, v.qty) + (p.kg ? "" : v.qty === 1 ? " unidad" : " unidades") : ""}</div></div>
-    <span class="pill ${n < 0 ? "bad" : n <= 7 ? "warn" : "ok"}">${n < 0 ? "Vencido" : enDias(n)}</span><button class="btn sm" data-vdone="${v.id}">Listo</button></div>`; };
+    <span class="pill ${n < 0 ? "bad" : n <= 7 ? "warn" : "ok"}">${n < 0 ? "Vencido" : enDias(n)}</span>${ext("ofertas") && n >= 0 ? `<button class="btn sm" data-voferta="${v.pid}">Oferta</button>` : ""}<button class="btn sm" data-vdone="${v.id}">Listo</button></div>`; };
   return `${header("Vencimientos", "Lo que hay que vender o retirar pronto")}
   <div class="stack">
     ${sec.map(([t, f]) => { const l = vs.filter(v => f(daysTo(v.fecha))); return l.length ? `<div class="card" style="padding-block:12px 0"><h3>${t}</h3><div class="list">${l.map(row).join("")}</div></div>` : ""; }).join("") || `<div class="card empty">No hay vencimientos anotados.</div>`}
-    <p class="small muted" style="margin:0">Toca <b>Listo</b> cuando ya se vendió o se sacó de la estantería.${ext("ofertas") ? " Para venderlo antes, ponlo en oferta en Más &gt; Ofertas y packs." : ""}</p>
+    <p class="small muted" style="margin:0">Toca <b>Listo</b> cuando ya se vendió o se sacó de la estantería.${ext("ofertas") ? " Con <b>Oferta</b> le pones un descuento para venderlo antes." : ""}</p>
     <div class="card stack"><h3>Anotar un vencimiento</h3>
       ${d.pid && P(d.pid) ? `<div class="spread"><b>${esc(P(d.pid).name)}</b><button class="btn sm ghost" id="vchange">Cambiar</button></div>`
         : `<div class="searchbar"><input class="input" id="q" placeholder="Buscar producto" autocomplete="off"><button class="btn accent" id="scan">Escanear</button></div><div class="list" id="res" hidden></div>`}
@@ -1345,6 +1391,8 @@ function bindVencimientos(app){
   const d = ui.venc;
   app.querySelectorAll("[data-vdone]").forEach(b => b.onclick = () => run(async () => { const v = S.vencimientos.find(x => x.id === b.dataset.vdone);
     await act.put("vencimientos", [Object.assign({}, v, { done:true, hecho:LocalDB.now() })]); rerender(); toast("Listo"); }));
+  app.querySelectorAll("[data-voferta]").forEach(b => b.onclick = () => { const p = P(b.dataset.voferta);
+    openOferta(null, { tipo:"descuento", pct:30, pids:[p.id], nombre:"Liquidación " + p.name }); });
   $("#vf").oninput = e => d.fecha = e.target.value; $("#vq").oninput = e => d.qty = e.target.value;
   const pick = p => { d.pid = p.id; closeModal(); rerender(); };
   if ($("#q")){ bindSearch(pick); $("#scan").onclick = () => openScanSheet(pick); }
@@ -1499,6 +1547,53 @@ function openEncargo(e){
   const del = $("#edel"); if (del) del.onclick = () => run(async () => { await act.del("encargos", e.id); closeModal(); render(); toast("Encargo borrado"); });
 }
 
+// ---------- Tipos de pan ----------
+// Cada pan es un producto del sector "Pan" y se vende por unidad o por kilo, según elija la tienda
+function viewTiposPan(){
+  const ps = S.products.filter(p => p.cat === "Pan").sort((a, b) => (b.has - a.has) || a.name.localeCompare(b.name, "es"));
+  return `${header("Tipos de pan", "Precio y forma de venta de cada pan")}
+  <div class="stack">
+    <button class="btn primary block" id="tpadd">+ Agregar tipo de pan</button>
+    ${ps.length ? `<div class="card" style="padding-block:0"><div class="list">${ps.map(p => `<button class="item tap" data-tp="${p.id}"><div class="main"><div class="name">${esc(p.name)}</div>
+      <div class="sub">${clp(p.price)} ${p.kg ? "el kilo" : "la unidad"}${p.atajo ? " · botón rápido" : ""}${p.reserva !== false ? " · se puede reservar" : ""}</div></div>
+      ${p.has ? `<span class="pill ok">${p.kg ? "Por kilo" : "Por unidad"}</span>` : `<span class="pill none">Ya no se vende</span>`}</button>`).join("")}</div></div>`
+      : `<div class="card stack"><p style="margin:0">Todavía no hay panes en el catálogo.</p><button class="btn block" id="tpseed">Agregar los panes típicos</button>
+        <p class="small muted" style="margin:0">Marraqueta, hallulla, pan amasado, dobladitas y pan integral, por kilo y con precios de referencia.</p></div>`}
+    <p class="small muted" style="margin:0"><b>Por unidad:</b> cada toque en Vender suma un pan. <b>Por kilo:</b> se escribe lo que marca la balanza o un monto en pesos. Si cambias la forma de venta de un pan, ese pan queda sin contar.</p>
+  </div>`;
+}
+function bindTiposPan(){
+  $("#tpadd").onclick = () => openTipoPan(null);
+  document.querySelectorAll("[data-tp]").forEach(b => b.onclick = () => openTipoPan(P(b.dataset.tp)));
+  const sd = $("#tpseed"); if (sd) sd.onclick = () => run(async () => {
+    const rows = CATALOG.filter(c => c[1] === "Pan").map(c => Object.assign({ id:uid(), name:c[0], cat:"Pan", price:c[2], cost:c[3], barcode:"", min:5, has:true, countQty:null, countAt:null, estimated:false }, c[5] || {}));
+    await act.put("products", rows); S.products.sort((a, b) => a.name.localeCompare(b.name, "es")); render(); toast("Panes agregados"); });
+}
+function openTipoPan(p){
+  const nuevo = !p;
+  let kg = nuevo ? true : !!p.kg;
+  openModal(`<div class="stack">
+    <div class="spread"><h2>${nuevo ? "Nuevo tipo de pan" : esc(p.name)}</h2><button class="btn ghost sm" data-close>Cerrar</button></div>
+    <div class="field"><label for="tpn">Nombre</label><input class="input" id="tpn" value="${esc(p?.name || "")}" placeholder="Ej: Coliza"></div>
+    <div class="field"><label>¿Cómo se vende?</label><div class="seg" role="group"><button data-tpu="1" aria-pressed="${!kg}">Por unidad</button><button data-tpu="0" aria-pressed="${kg}">Por kilo</button></div></div>
+    <div class="field"><label for="tpp" id="tppl">${kg ? "Precio del kilo" : "Precio de cada pan"}</label><input class="input" id="tpp" type="number" min="0" inputmode="numeric" value="${p?.price ?? ""}" placeholder="Ej: ${kg ? "2190" : "300"}"></div>
+    <label class="row small"><input type="checkbox" id="tpat" ${nuevo || p.atajo ? "checked" : ""}> Botón rápido en Vender</label>
+    <label class="row small"><input type="checkbox" id="tpres" ${nuevo || p.reserva !== false ? "checked" : ""}> Los clientes lo pueden reservar</label>
+    ${nuevo ? "" : `<label class="row small"><input type="checkbox" id="tpoff" ${p.has ? "" : "checked"}> Ya no lo vendemos</label>`}
+    <button class="btn primary block" id="tpsave">Guardar</button>
+  </div>`);
+  document.querySelectorAll("[data-tpu]").forEach(b => b.onclick = () => { kg = b.dataset.tpu === "0";
+    document.querySelectorAll("[data-tpu]").forEach(x => x.setAttribute("aria-pressed", x === b)); $("#tppl").textContent = kg ? "Precio del kilo" : "Precio de cada pan"; });
+  $("#tpsave").onclick = () => run(async () => {
+    const name = $("#tpn").value.trim(), price = Math.round(+$("#tpp").value || 0);
+    if (!name) return $("#tpn").focus(); if (!price) return $("#tpp").focus();
+    const f = { name, price, kg, atajo:$("#tpat").checked, reserva:$("#tpres").checked };
+    if (nuevo){ await act.put("products", [Object.assign({ id:uid(), cat:"Pan", cost:Math.round(price * 0.65), barcode:"", min:kg ? 5 : 20, has:true, countQty:null, countAt:null, estimated:false }, f)]);
+      S.products.sort((a, b) => a.name.localeCompare(b.name, "es")); }
+    else { f.has = !$("#tpoff").checked; Object.assign(f, cambioUnidad(p, kg)); await act.updateProduct(p, f); }
+    closeModal(); render(); toast(nuevo ? `${name} agregado` : "Guardado"); });
+}
+
 // ---------- Extensiones: cada tienda activa solo lo que usa ----------
 // Vender, productos, historial y los datos de la tienda siempre están. Lo demás se
 // activa o se quita en Más > Extensiones, y se guarda para todos los dispositivos de la tienda.
@@ -1527,7 +1622,7 @@ const extSwitches = (attr, on) => GRUPOS_EXT.map(g => `<h3 class="ext-g">${g}</h
 const ext = id => (S?.ajustes?.extensiones || {})[id] !== false;
 
 function viewExtensiones(){
-  return `<header class="top"><button class="btn sm" data-go="mas">← Más</button>${netPill()}</header>
+  return `<header class="top"><button class="btn sm" data-back>← Regresar</button>${netPill()}</header>
   <div class="stack">
     <div><h2>Extensiones</h2><p class="small muted" style="margin:4px 0 0">Activa solo lo que usa tu negocio. Lo que quites desaparece de las pantallas, pero sus datos no se borran: si la vuelves a activar, todo sigue ahí. El cambio se aplica en todos los dispositivos de la tienda.</p></div>
     <div class="card" style="padding-block:4px 0">${extSwitches("data-ext", e => ext(e.id))}</div>
@@ -1551,7 +1646,14 @@ const PALETAS = {
   grafito:  { nombre:"Grafito",       brand:"#2d3436", accent:"#d35400", brandD:"#c3ccd0", accentD:"#f0894d" }
 };
 const ESTILOS = { redondeado:"Redondeado", suave:"Suave", recto:"Recto" };
-const FUENTES = { moderna:"Moderna", clasica:"Clásica", simple:"Simple" };
+const FUENTES = { moderna:"Original", redondeada:"Redondeada", clasica:"Con serifa", legible:"Fácil de leer", simple:"Simple" };
+// Letras que se descargan solo si alguien las elige
+const FUENTES_CSS = { redondeada:"https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap",
+  legible:"https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap" };
+const FUENTE_MUESTRA = { moderna:'"Bricolage Grotesque"', redondeada:'"Nunito"', clasica:"Georgia,serif", legible:'"Atkinson Hyperlegible"', simple:"system-ui" };
+const APARIENCIA_ORIGINAL = { paleta:"verde", estilo:"redondeado", fuente:"moderna" };
+function cargarFuente(f){ if (!FUENTES_CSS[f] || document.getElementById("font-" + f)) return;
+  const l = document.createElement("link"); l.id = "font-" + f; l.rel = "stylesheet"; l.href = FUENTES_CSS[f]; document.head.appendChild(l); }
 const MODOS = { auto:"Automático", claro:"Claro", oscuro:"Oscuro" };
 const LETRAS = { normal:"Normal", grande:"Grande" };
 
@@ -1560,7 +1662,7 @@ const rgbHex = c => "#" + c.map(x => Math.round(Math.max(0, Math.min(255, x))).t
 const mix = (a, b, t) => rgbHex(hexRgb(a).map((x, i) => x + (hexRgb(b)[i] - x) * t));
 const lum = h => { const [r,g,b] = hexRgb(h).map(x => { x /= 255; return x <= .03928 ? x/12.92 : ((x+.055)/1.055) ** 2.4; }); return .2126*r + .7152*g + .0722*b; };
 const onColor = h => lum(h) > .4 ? "#14201a" : "#ffffff";
-const apariencia = () => Object.assign({ paleta:"verde", estilo:"redondeado", fuente:"moderna" }, S?.ajustes?.apariencia || {});
+const apariencia = () => Object.assign({}, APARIENCIA_ORIGINAL, S?.ajustes?.apariencia || {});
 const prefs = () => Object.assign({ modo:"auto", letra:"normal" }, meta.prefs || {});
 function colores(a){
   if (a.paleta === "propia" && /^#[0-9a-f]{6}$/i.test(a.brand || "") && /^#[0-9a-f]{6}$/i.test(a.accent || ""))
@@ -1574,7 +1676,7 @@ function applyTheme(){
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){${vars(c.brandD, c.accentD, "#121814")}}}
 :root[data-theme="dark"]{${vars(c.brandD, c.accentD, "#121814")}}`;
   if (p.modo === "auto") root.removeAttribute("data-theme"); else root.dataset.theme = p.modo === "oscuro" ? "dark" : "light";
-  root.dataset.estilo = a.estilo; root.dataset.fuente = a.fuente; root.dataset.letra = p.letra;
+  root.dataset.estilo = a.estilo; root.dataset.fuente = a.fuente; root.dataset.letra = p.letra; cargarFuente(a.fuente);
   const dark = p.modo === "oscuro" || (p.modo === "auto" && matchMedia("(prefers-color-scheme: dark)").matches);
   document.querySelector('meta[name="theme-color"]')?.setAttribute("content", dark ? "#121814" : c.brand);
 }
@@ -1583,7 +1685,7 @@ matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", applyThe
 function viewApariencia(){
   const a = apariencia(), p = prefs(), c = colores(a);
   const seg = (name, opts, cur) => `<div class="seg" role="group">${Object.entries(opts).map(([k, v]) => `<button data-${name}="${k}" aria-pressed="${k === cur}">${esc(v)}</button>`).join("")}</div>`;
-  return `<header class="top"><button class="btn sm" data-go="mas">← Más</button>${netPill()}</header>
+  return `<header class="top"><button class="btn sm" data-back>← Regresar</button>${netPill()}</header>
   <div class="stack">
     <div><h2>Apariencia</h2><p class="small muted" style="margin:4px 0 0">Elige cómo se ve tu sistema. Los cambios se ven al instante.</p></div>
     <div class="card stack"><h3>Colores</h3>
@@ -1595,7 +1697,8 @@ function viewApariencia(){
     </div>
     <div class="card stack"><h3>Estilo</h3>${seg("estilo", ESTILOS, a.estilo)}
       <p class="small muted" style="margin:0">Redondeado es el de siempre; Suave tiene esquinas más curvas y tarjetas con sombra; Recto tiene esquinas rectas.</p></div>
-    <div class="card stack"><h3>Letra de los títulos</h3>${seg("fuente", FUENTES, a.fuente)}</div>
+    <div class="card stack"><h3>Tipo de letra</h3><div class="seg wrap" role="group">${Object.entries(FUENTES).map(([k, v]) => `<button data-fuente="${k}" aria-pressed="${k === a.fuente}" style="font-family:${FUENTE_MUESTRA[k]}">${esc(v)}</button>`).join("")}</div>
+      <p class="small muted" style="margin:0">Original, Redondeada y Fácil de leer cambian toda la letra; Con serifa y Simple cambian los títulos.</p></div>
     <div class="card stack"><h3>En este dispositivo</h3>
       <div class="field"><label>Modo</label>${seg("modo", MODOS, p.modo)}</div>
       <div class="field"><label>Tamaño de letra</label>${seg("letra", LETRAS, p.letra)}</div>
@@ -1603,6 +1706,7 @@ function viewApariencia(){
     <div class="card stack"><h3>Vista previa</h3>
       <div class="row"><span class="pill ok">12 en stock</span><span class="pill warn">Quedan 2</span><span class="pill bad">Agotado</span></div>
       <div class="grid2"><button class="btn primary">Confirmar venta</button><button class="btn accent">Escanear</button></div></div>
+    <button class="btn block" id="aporig">Volver a la apariencia original</button>
   </div>`;
 }
 async function setApariencia(cambio){
@@ -1630,7 +1734,7 @@ function viewDatos(){
     : installEvt ? `<button class="btn primary block" id="install">Instalar la app en este dispositivo</button>`
     : isIOS() ? `<p class="small muted" style="margin:0">En iPhone: toca el botón Compartir de Safari y elige "Agregar a pantalla de inicio".</p>`
     : `<p class="small muted" style="margin:0">Abre el menú del navegador (⋮) y elige "Instalar app" o "Agregar a la pantalla principal".</p>`;
-  return `<header class="top"><button class="btn sm" data-go="mas">← Más</button>${netPill()}</header>
+  return `<header class="top"><button class="btn sm" data-back>← Regresar</button>${netPill()}</header>
   <div class="stack">
     <h2>Tienda y datos</h2>
     <div class="card stack"><h3>Tienda</h3>
@@ -1713,22 +1817,27 @@ function confirmWipe(after){
 function viewMas(){
   const pend = S.reservas.filter(r => !r.done).length;
   const opt = (go, icon, title, sub) => `<button class="sector" data-go="${go}"><span class="name" style="display:flex;gap:10px;align-items:center"><span style="width:22px;height:22px;display:inline-flex" class="mi">${ICONS[icon]}</span>${title}</span><span></span><span class="sub">${sub}</span></button>`;
+  const sec = (t, items) => { const h = items.filter(Boolean).join(""); return h ? `<h3 style="margin-top:8px">${t}</h3>${h}` : ""; };
   return `${header("Más", "Otras herramientas")}
   <div class="stack">
-    ${ext("recibir") ? opt("recibir","recibir","Recibir mercadería","Registrar lo que llega del proveedor") : ""}
-    ${ext("compras") ? opt("compras","compras","Lista de compras","Lo que está por acabarse, para pedir al proveedor") : ""}
-    ${ext("vencimientos") ? opt("vencimientos","vencimientos","Vencimientos","Lo que vence pronto") : ""}
-    ${ext("proveedores") ? opt("proveedores","proveedores","Proveedores","Días de visita y lo que les debes") : ""}
-    ${ext("caja") ? opt("caja","caja","Cierre de caja","Compara lo vendido con lo que hay en la caja") : ""}
-    ${ext("ofertas") ? opt("ofertas","ofertas","Ofertas y packs", `${S.ofertas.filter(o => ofertaVigente(o)).length} activas ahora`) : ""}
-    ${ext("encargos") ? opt("encargos","encargos","Encargos", `${S.encargos.filter(e => e.estado !== "entregado").length} por entregar`) : ""}
-    ${ext("personas") ? opt("personas","personas","Quién atiende", quien() ? "Ahora atiende " + esc(nombrePersona(quien())) : "Elige quién atiende en este dispositivo") : ""}
-    ${opt("historial","historial","Historial","Todo lo que entra, sale y se cuenta")}
-    ${ext("pan") ? opt("reservas","reservas","Reservas de pan", pend + " pendientes hoy") : ""}
-    ${opt("extensiones","extensiones","Extensiones", "Activa solo las funciones que usa tu negocio")}
-    ${opt("apariencia","apariencia","Apariencia", "Colores, estilo y tamaño de letra")}
-    ${opt("datos","datos","Tienda y datos", `${meta.pending} cambios guardados en este dispositivo · respaldo e instalación`)}
-    ${!ext("pan") ? "" : `<button class="sector" id="panbtn"><span class="name" style="display:flex;gap:10px;align-items:center"><span style="width:22px;height:22px;display:inline-flex" class="mi">${ICONS.pan}</span>Avisar que llegó el pan</span><span></span><span class="sub">Mensaje al grupo de WhatsApp de clientes</span></button>`}
+    ${sec("Logística", [
+      ext("recibir") && opt("recibir","recibir","Recibir mercadería","Registrar lo que llega del proveedor"),
+      ext("compras") && opt("compras","compras","Lista de compras","Lo que está por acabarse, para pedir al proveedor"),
+      ext("proveedores") && opt("proveedores","proveedores","Proveedores","Días de visita y lo que les debes"),
+      ext("vencimientos") && opt("vencimientos","vencimientos","Vencimientos","Lo que vence pronto"),
+      ext("ofertas") && opt("ofertas","ofertas","Ofertas y packs", `${S.ofertas.filter(o => ofertaVigente(o)).length} activas ahora`),
+      ext("caja") && opt("caja","caja","Cierre de caja","Compara lo vendido con lo que hay en la caja"),
+      opt("historial","historial","Historial","Todo lo que entra, sale y se cuenta")])}
+    ${sec("Clientes y pan", [
+      ext("encargos") && opt("encargos","encargos","Encargos", `${S.encargos.filter(e => e.estado !== "entregado").length} por entregar`),
+      ext("pan") && `<button class="sector" id="panbtn"><span class="name" style="display:flex;gap:10px;align-items:center"><span style="width:22px;height:22px;display:inline-flex" class="mi">${ICONS.pan}</span>Avisar que llegó el pan</span><span></span><span class="sub">Mensaje al grupo de WhatsApp de clientes</span></button>`,
+      ext("pan") && opt("reservas","reservas","Reservas de pan", pend + " pendientes hoy"),
+      ext("pan") && opt("tipospan","pan","Tipos de pan", "Precios, por unidad o por kilo, botones rápidos y reservas")])}
+    ${sec("Configuración", [
+      ext("personas") && opt("personas","personas","Quién atiende", quien() ? "Ahora atiende " + esc(nombrePersona(quien())) : "Elige quién atiende en este dispositivo"),
+      opt("extensiones","extensiones","Extensiones", "Activa solo las funciones que usa tu negocio"),
+      opt("apariencia","apariencia","Apariencia", "Colores, estilo y tipo de letra"),
+      opt("datos","datos","Tienda y datos", `${meta.pending} cambios guardados en este dispositivo · respaldo e instalación`)])}
   </div>`;
 }
 
@@ -1748,9 +1857,10 @@ function render(){
   const v = ui.view, app = $("#app");
   app.innerHTML = ({ inicio:viewInicio, vender:viewVender, recibir:viewRecibir, contar:viewContar, productos:viewProductos, historial:viewHistorial, fiados:viewFiados, mas:viewMas,
     reservas:viewReservas, datos:viewDatos, extensiones:viewExtensiones, apariencia:viewApariencia, compras:viewCompras, vencimientos:viewVencimientos,
-    proveedores:viewProveedores, caja:viewCaja, ofertas:viewOfertas, personas:viewPersonas, encargos:viewEncargos })[v]();
-  ({ compras:bindCompras, vencimientos:bindVencimientos, proveedores:bindProveedores, caja:bindCaja, ofertas:bindOfertas, personas:bindPersonas, encargos:bindEncargos })[v]?.(app);
+    proveedores:viewProveedores, caja:viewCaja, tipospan:viewTiposPan, ofertas:viewOfertas, personas:viewPersonas, encargos:viewEncargos })[v]();
+  ({ tipospan:bindTiposPan, compras:bindCompras, vencimientos:bindVencimientos, proveedores:bindProveedores, caja:bindCaja, ofertas:bindOfertas, personas:bindPersonas, encargos:bindEncargos })[v]?.(app);
   app.querySelectorAll("[data-go]").forEach(b => b.onclick = () => go(b.dataset.go));
+  app.querySelectorAll("[data-back]").forEach(b => b.onclick = back);
   const pb = $("#panbtn"); if (pb) pb.onclick = openPan;
   if (v === "fiados"){
     $("#addc").onclick = openNewClient;
@@ -1772,6 +1882,8 @@ function render(){
     app.querySelectorAll("[data-fuente]").forEach(b => b.onclick = () => run(async () => { await setApariencia({ fuente:b.dataset.fuente }); redo(); }));
     app.querySelectorAll("[data-modo]").forEach(b => b.onclick = () => run(async () => { await setPref({ modo:b.dataset.modo }); redo(); }));
     app.querySelectorAll("[data-letra]").forEach(b => b.onclick = () => run(async () => { await setPref({ letra:b.dataset.letra }); redo(); }));
+    $("#aporig").onclick = () => run(async () => { S.ajustes.apariencia = Object.assign({}, APARIENCIA_ORIGINAL); applyTheme(); await act.setting("apariencia", S.ajustes.apariencia);
+      await setPref({ modo:"auto", letra:"normal" }); redo(); toast("Apariencia original"); });
   }
   if (v === "datos"){
     $("#tsave").onclick = () => run(async () => { const n = $("#tname").value.trim(); if (!n) return $("#tname").focus();
@@ -1796,7 +1908,7 @@ function render(){
   if (v === "reservas"){
     app.querySelectorAll("[data-res]").forEach(b => b.onclick = () => run(async () => { const r = S.reservas.find(r => r.id === b.dataset.res); await act.reserva(r, !r.done); render(); }));
     const rn = $("#rn"); rn.value = ui.resName || ""; rn.oninput = () => ui.resName = rn.value;
-    const step = (b, d) => { ui.resQty[b] = Math.max(0, (ui.resQty[b]||0) + d); const y = window.scrollY; render(); window.scrollTo(0, y); };
+    const step = (id, d) => { if (P(id)?.kg) d /= 2; ui.resQty[id] = Math.max(0, (ui.resQty[id]||0) + d); const y = window.scrollY; render(); window.scrollTo(0, y); };
     app.querySelectorAll("[data-binc]").forEach(x => x.onclick = () => step(x.dataset.binc, 1));
     app.querySelectorAll("[data-bdec]").forEach(x => x.onclick = () => step(x.dataset.bdec, -1));
     $("#rsave").onclick = () => run(async () => { const name = rn.value.trim(); if (!name){ rn.focus(); toast("Escribe el nombre del cliente"); return; }
@@ -1812,6 +1924,7 @@ function render(){
     app.querySelectorAll("[data-inc]").forEach(b => b.onclick = () => { ui.cart[b.dataset.inc].qty++; render(); });
     app.querySelectorAll("[data-dec]").forEach(b => b.onclick = () => { const l = ui.cart[b.dataset.dec]; if (--l.qty <= 0) ui.cart.splice(b.dataset.dec,1); render(); });
     app.querySelectorAll("[data-rm]").forEach(b => b.onclick = () => { ui.cart.splice(b.dataset.rm, 1); render(); });
+    app.querySelectorAll("[data-quick]").forEach(b => b.onclick = () => addToCart(P(b.dataset.quick)));
     app.querySelectorAll("[data-w]").forEach(b => b.onclick = () => { const l = ui.cart[b.dataset.w]; openPeso(P(l.pid), l.qty, kg => { l.qty = kg; closeModal(); render(); }); });
     app.querySelectorAll("[data-pago]").forEach(b => b.onclick = () => { ui.pago = b.dataset.pago; rerender(); });
     const pc = $("#pagacon"); if (pc) pc.oninput = () => { ui.pagaCon = pc.value; $("#vuelto").textContent = vuelto(pricing(ui.cart).total); };
@@ -1828,6 +1941,7 @@ function render(){
     app.querySelectorAll("[data-rq]").forEach(i => i.oninput = () => { const l = ui.recv.items[i.dataset.rq]; l.qty = P(l.pid).kg ? r3(Math.max(0, num(i.value))) : Math.max(0, Math.round(num(i.value))); });
     app.querySelectorAll("[data-rv]").forEach(i => i.oninput = () => { ui.recv.items[i.dataset.rv].vence = i.value; });
     const rd = $("#rdebe"); if (rd) rd.onchange = () => ui.recv.debe = rd.checked;
+    app.querySelectorAll("[data-sup]").forEach(b => b.onclick = () => { ui.recv.supplier = b.dataset.sup; rerender(); });
     app.querySelectorAll("[data-rc]").forEach(i => i.oninput = () => { ui.recv.items[i.dataset.rc].cost = Math.max(0, +i.value||0); });
     app.querySelectorAll("[data-rq],[data-rc]").forEach(i => i.onchange = render);
     $("#confirm").onclick = () => run(async () => { const n = ui.recv.items.reduce((a,l) => a + (l.qty||0), 0);
@@ -1836,9 +1950,9 @@ function render(){
       ui.recv.items = []; ui.recv.debe = false; render(); toast(`Recepción guardada: ${n} unidades`); });
   }
   if (v === "contar"){
-    app.querySelectorAll("[data-sector]").forEach(b => b.onclick = () => { ui.sector = b.dataset.sector; ui.draft = {}; render(); window.scrollTo(0,0); });
+    app.querySelectorAll("[data-sector]").forEach(b => b.onclick = () => { ui.sector = b.dataset.sector; ui.draft = {}; pushNav(); render(); window.scrollTo(0,0); });
     if (ui.sector){
-      $("#back").onclick = () => { ui.sector = null; render(); };
+      $("#back").onclick = back;
       app.querySelectorAll("[data-cq]").forEach(i => i.oninput = () => { (ui.draft[i.dataset.cq] ||= {}).qty = i.value; });
       app.querySelectorAll("[data-ce]").forEach(i => i.onchange = () => { (ui.draft[i.dataset.ce] ||= {}).est = i.checked; });
       app.querySelectorAll("[data-cn]").forEach(b => b.onclick = () => { const p = P(b.dataset.cn); const d = (ui.draft[p.id] ||= {}); const off = d.none ?? !p.has; d.none = !off; render(); });
@@ -1882,7 +1996,7 @@ async function openStore(){
   if (invite && invite.tienda !== meta.tienda.id) toast("Este dispositivo ya tiene otra tienda. Para unirte, primero borra sus datos en Más > Tienda y datos.");
   clearInvite();
   if (!meta.demo && !meta.servidor){ const o = await localServer(); if (o){ meta.servidor = o; await LocalDB.setMeta("servidor", o); } }
-  MODE = "local"; $("nav.tabs").hidden = false; render();
+  MODE = "local"; $("nav.tabs").hidden = false; history.replaceState({ v:ui.view, n:0 }, ""); render();
   if (!meta.demo && meta.servidor) Sync.start(meta.servidor, meta.tienda.id); else Sync.stop();
 }
 Sync.state.onStatus = () => { LocalDB.pendingCount().then(n => { meta.pending = n; if (MODE) updateNet(); }, () => {}); };
@@ -1899,7 +2013,7 @@ function showSetup(){
       <div class="field"><label for="sp">Tu nombre</label><input class="input" id="sp" placeholder="Ej: Rosa" autocomplete="given-name"></div>
       <div class="field"><label>¿Con qué productos empiezas?</label>
         <div class="stack" style="gap:8px">
-          <button class="choice" data-ini="catalogo" aria-pressed="true">Productos típicos de almacén<small>54 productos en 9 sectores (bebidas, lácteos, abarrotes…). Después ajustas precios y cuentas lo que tienes.</small></button>
+          <button class="choice" data-ini="catalogo" aria-pressed="true">Productos típicos de almacén<small>${CATALOG.length} productos en ${SECTORS.length} sectores (pan, verduras, bebidas, lácteos, abarrotes…). Los precios son de referencia: después los ajustas y cuentas lo que tienes.</small></button>
           <button class="choice" data-ini="vacio" aria-pressed="false">Empezar vacío<small>Agregas tus productos uno por uno o escaneando el código de barras.</small></button>
         </div></div>
       <div class="field"><label>¿Qué vas a usar?</label>

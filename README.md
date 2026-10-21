@@ -17,8 +17,10 @@ Parte del código de [Inventario_almacen_VD](https://github.com/benjaminolate/In
 - **Extensiones:** cada tienda activa solo lo que usa, en Más > Extensiones. Al quitar una, sus datos no se borran.
   - Inventario: conteo por sectores, recibir mercadería, **stock bajo y lista de compras** (pedido por WhatsApp a cada proveedor), **vencimientos**, **proveedores** (días de visita y deuda) y **venta a granel** (por kilo o gramos).
   - Ventas: **cierre de caja** (efectivo, tarjeta y transferencia, con vuelto), **ofertas y packs** ("3 por $1.000" o % por día y horario), **comprobante** por WhatsApp o impreso (sin valor tributario) y **quién atiende**.
-  - Clientes: fiados, pan (aviso y reservas) y **encargos** para otro día con abono.
-- **Apariencia:** 6 paletas de colores o colores propios, estilo (redondeado, suave, recto) y letra de títulos, para toda la tienda; modo claro u oscuro y letra grande, por dispositivo.
+  - Clientes y pan: fiados, pan (aviso, reservas y **tipos de pan**, cada uno por unidad o por kilo) y **encargos** para otro día con abono.
+- **Botones rápidos** en Vender para el pan o cualquier producto, y catálogo inicial con pan y verduras a granel.
+- **Navegación:** Más ordenado en Logística, Clientes y pan, y Configuración; todas las pantallas tienen "← Regresar" y el botón atrás del celular vuelve a la anterior.
+- **Apariencia:** 6 paletas de colores o colores propios, estilo (redondeado, suave, recto) y 5 tipos de letra, con botón para volver a la original, para toda la tienda; modo claro u oscuro y letra grande, por dispositivo.
 
 ## Cómo se guardan los datos
 
