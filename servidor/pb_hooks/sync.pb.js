@@ -14,7 +14,7 @@ routerAdd("GET", "/api/sync/estado", (e) => {
 });
 
 routerAdd("POST", "/api/sync", (e) => {
-  const STORES = ["products", "movs", "clients", "fiados", "reservas", "ajustes"];
+  const STORES = ["products", "movs", "clients", "fiados", "reservas", "ajustes", "vencimientos", "cajas", "proveedores", "provmovs", "ofertas", "personas", "encargos"];
   const LIMIT = 1000;
   const body = e.requestInfo().body || {};
   const tienda = String(body.tienda || "");

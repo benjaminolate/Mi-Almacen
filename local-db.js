@@ -12,9 +12,11 @@
 // varios celulares, todos quedan en el mismo orden aunque sus relojes difieran.
 (function(){
 "use strict";
-const NAME = "mi-almacen", VERSION = 1;
+const NAME = "mi-almacen", VERSION = 2;
 // Tablas: clave primaria de cada una
-const STORES = { products:"id", movs:"id", clients:"id", fiados:"id", reservas:"id", ajustes:"clave", meta:"key" };
+// Versión 2 suma las tablas de las extensiones (vencimientos, caja, proveedores, ofertas, personas y encargos)
+const STORES = { products:"id", movs:"id", clients:"id", fiados:"id", reservas:"id", ajustes:"clave", meta:"key",
+  vencimientos:"id", cajas:"id", proveedores:"id", provmovs:"id", ofertas:"id", personas:"id", encargos:"id" };
 let dbp = null;
 
 function req(r){ return new Promise((res, rej) => { r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }); }
@@ -24,12 +26,14 @@ function open(){
   if (dbp) return dbp;
   return dbp = new Promise((res, rej) => {
     const r = indexedDB.open(NAME, VERSION);
-    r.onupgradeneeded = () => {
+    r.onupgradeneeded = e => {
       const db = r.result;
       for (const [s, key] of Object.entries(STORES)) if (!db.objectStoreNames.contains(s)) db.createObjectStore(s, { keyPath:key });
       if (!db.objectStoreNames.contains("outbox")) db.createObjectStore("outbox", { keyPath:"seq", autoIncrement:true });
+      // La versión anterior se saltaba los cambios de las tablas que no conocía: se vuelve a pedir todo al servidor
+      if (e.oldVersion > 0 && e.oldVersion < 2) r.transaction.objectStore("meta").put({ key:"cursor", value:0 });
     };
-    r.onsuccess = () => res(r.result);
+    r.onsuccess = () => { const db = r.result; db.onversionchange = () => db.close(); res(db); };
     r.onerror = () => rej(r.error);
     r.onblocked = () => rej(new Error("Cierra las otras pestañas de la app y vuelve a abrirla"));
   });

@@ -14,7 +14,10 @@ Parte del código de [Inventario_almacen_VD](https://github.com/benjaminolate/In
 - **Funciona sin internet:** la app queda guardada en el dispositivo (service worker) y los datos en su base local (IndexedDB).
 - **Instalable** como app (PWA), sin pasar por Play Store.
 - **Respaldo** en un archivo y restauración desde él.
-- **Extensiones:** cada tienda activa solo lo que usa (conteo por sectores, recibir mercadería, fiados, pan: aviso y reservas). Al quitar una, sus datos no se borran.
+- **Extensiones:** cada tienda activa solo lo que usa, en Más > Extensiones. Al quitar una, sus datos no se borran.
+  - Inventario: conteo por sectores, recibir mercadería, **stock bajo y lista de compras** (pedido por WhatsApp a cada proveedor), **vencimientos**, **proveedores** (días de visita y deuda) y **venta a granel** (por kilo o gramos).
+  - Ventas: **cierre de caja** (efectivo, tarjeta y transferencia, con vuelto), **ofertas y packs** ("3 por $1.000" o % por día y horario), **comprobante** por WhatsApp o impreso (sin valor tributario) y **quién atiende**.
+  - Clientes: fiados, pan (aviso y reservas) y **encargos** para otro día con abono.
 - **Apariencia:** 6 paletas de colores o colores propios, estilo (redondeado, suave, recto) y letra de títulos, para toda la tienda; modo claro u oscuro y letra grande, por dispositivo.
 
 ## Cómo se guardan los datos
@@ -22,6 +25,7 @@ Parte del código de [Inventario_almacen_VD](https://github.com/benjaminolate/In
 ```
 Pantalla ──> act (acciones) ──> LocalDB.apply()  ──> IndexedDB del dispositivo
                                       │                 ├─ products, movs, clients, fiados, reservas, ajustes
+                                      │                 ├─ vencimientos, cajas, proveedores, provmovs, ofertas, personas, encargos
                                       │                 └─ outbox: cambios por enviar al servidor
                                       └─ cada cambio lleva un sello "hlc" (reloj lógico híbrido)
 ```
