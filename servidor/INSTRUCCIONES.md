@@ -51,6 +51,14 @@ Desde ahí, lo que se venda en uno aparece en el otro al instante.
 - Cierra la ventana del servidor, sigue vendiendo en los dos, y vuelve a prenderlo: todo se junta.
 - Cambia el precio de un mismo producto en los dos: queda el último que se cambió.
 
+## Respaldos automáticos
+
+El servidor guarda solo una copia de todo **cada día a las 3 de la mañana** (si el computador está prendido) y mantiene las últimas 14. Quedan en `mi-almacen-datos/backups`.
+
+Para volver a una copia: entra a `http://localhost:8090/_/` con la cuenta de administrador → **Settings → Backups** → elige la fecha → **Restore**. Ahí mismo puedes hacer una copia a mano con **Initialize new backup**.
+
+Aparte, desde la app (**Más → Tienda y datos**) puedes descargar un respaldo a tu teléfono. Al restaurarlo puedes elegir **Agregar lo que falta**, que no borra nada de lo que ya hay.
+
 ## Lo que todavía no funciona en el celular (se arregla en la Fase 3)
 
 Como la dirección del wifi (`http://192.168...`) no tiene candado, en el celular:

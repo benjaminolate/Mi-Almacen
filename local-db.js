@@ -144,6 +144,19 @@ async function importAll(file){
   for (const s of names){ const st = tx.objectStore(s); st.clear(); (file.tablas[s] || []).forEach(v => st.put(v)); }
   await done(tx);
 }
+// Restaurar sin borrar: los registros del respaldo que no existen aquí, listos para guardar con apply()
+async function missing(file){
+  if (!file || file.app !== "mi-almacen" || !file.tablas) throw new Error("El archivo no es un respaldo de esta app");
+  const db = await open(), names = Object.keys(STORES).filter(s => s !== "meta"), tx = db.transaction(names, "readonly"), out = [];
+  for (const s of names){
+    const st = tx.objectStore(s);
+    for (const v of file.tablas[s] || []){
+      const k = v?.[STORES[s]]; if (k == null) continue;
+      if (!(await req(st.get(k)))){ const { _v, ...value } = v; out.push({ store:s, value }); }
+    }
+  }
+  return out;
+}
 async function wipe(){
   const db = await open(), names = [...Object.keys(STORES), "outbox"], tx = db.transaction(names, "readwrite");
   names.forEach(s => tx.objectStore(s).clear());
@@ -157,5 +170,5 @@ async function persist(){
     return navigator.storage?.persist ? await navigator.storage.persist() : false; } catch(e){ return false; }
 }
 
-window.LocalDB = { open, uuid, tick, seen, clock, now, loadAll, apply, getMeta, setMeta, pendingCount, outboxBatch, ack, applyRemote, exportAll, importAll, wipe, persist };
+window.LocalDB = { open, uuid, tick, seen, clock, now, loadAll, apply, getMeta, setMeta, pendingCount, outboxBatch, ack, applyRemote, exportAll, importAll, missing, wipe, persist };
 })();

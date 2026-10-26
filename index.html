@@ -164,6 +164,10 @@ nav.tabs button[aria-current="page"]{color:var(--brand)}
 .quick button{padding:10px 8px;border:1px solid var(--line);background:var(--surface);border-radius:var(--r2);font-weight:700;font-size:14px;line-height:1.2}
 .quick button small{display:block;font-weight:500;font-size:12px;color:var(--muted)}
 .seg.wrap{grid-auto-flow:row;grid-template-columns:repeat(auto-fill,minmax(104px,1fr))}
+.tour-hole{position:fixed;border-radius:var(--r2);box-shadow:0 0 0 9999px rgba(10,16,12,.62);z-index:40;pointer-events:none;transition:all .2s}
+.tour-card{position:fixed;left:16px;right:16px;max-width:420px;margin:0 auto;background:var(--surface);color:var(--fg);border-radius:var(--r);padding:16px;z-index:41;box-shadow:0 8px 30px rgba(0,0,0,.25)}
+.barra{display:grid;grid-template-columns:72px 1fr auto;gap:8px;align-items:center;font-size:13px;padding:4px 0}
+.barra i{display:block;height:10px;background:var(--brand);border-radius:var(--rp);min-width:2px}
 .hint{background:var(--accent-soft);border-radius:var(--r2);padding:8px 10px;font-size:13px;font-weight:600}
 :root[data-fuente="redondeada"]{--font-display:"Nunito","Figtree",system-ui,sans-serif;--font-body:"Nunito","Figtree",system-ui,sans-serif}
 :root[data-fuente="legible"]{--font-display:"Atkinson Hyperlegible",system-ui,sans-serif;--font-body:"Atkinson Hyperlegible",system-ui,sans-serif}
@@ -181,6 +185,7 @@ nav.tabs button[aria-current="page"]{color:var(--brand)}
 
 <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
 <script src="local-db.js"></script>
+<script src="catalogos.js"></script>
 <script src="sync.js"></script>
 <script>
 (function(){
@@ -194,7 +199,40 @@ const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt
 const clp = n => "$" + Math.round(n).toLocaleString("es-CL");
 const uid = () => LocalDB.uuid();
 
-const SECTORS = ["Pan","Verduras","Bebidas","Jugos","Lácteos","Abarrotes","Legumbres","Galletas","Conservas","Snacks","Aseo"];
+// Orden en que se muestran los sectores; los que no están en la lista van al final
+const ORDEN_SECTORES = ["Pan","Pastelería","Fiambrería","Verduras","Frutas","Vacuno","Cerdo","Pollo","Embutidos","Parrilla","Bebidas","Cervezas","Vinos","Licores",
+  "Jugos","Lácteos","Abarrotes","Legumbres","Galletas","Conservas","Snacks","Dulces","Helados","Aseo","Mascotas","Otros"];
+// Sectores que tienen productos en esta tienda
+function sectores(){ const set = new Set(S.products.map(p => p.cat)); return [...ORDEN_SECTORES.filter(c => set.has(c)), ...[...set].filter(c => !ORDEN_SECTORES.includes(c)).sort((a, b) => a.localeCompare(b, "es"))]; }
+// Un producto se vende si la tienda lo tiene y su sector no está apagado
+const sectorOff = c => (S.ajustes.sectores_off || []).includes(c);
+const disp = p => p.has && !sectorOff(p.cat);
+
+// Tipos de negocio: qué productos trae al empezar y qué extensiones vienen prendidas.
+// catalogo: "generico" (con precios de referencia) o un catálogo de catalogos.js, opcionalmente filtrado por sectores
+const NEGOCIOS = {
+  almacen:   { nombre:"Almacén", desc:"Abarrotes, bebidas, lácteos, aseo, pan y verduras", catalogo:[["generico"], ["emporio"]], ext:["contar","recibir","compras","fiados","pan","granel","caja"] },
+  minimarket:{ nombre:"Minimarket", desc:"Como un almacén, con más control de caja, ofertas y equipo", catalogo:[["generico"], ["emporio"]], ext:["contar","recibir","compras","vencimientos","proveedores","granel","caja","ofertas","comprobante","personas","fiados"] },
+  panaderia: { nombre:"Panadería", desc:"Pan por kilo o por unidad, pastelería y fiambrería", catalogo:[["panaderia"]], ext:["contar","recibir","compras","pan","granel","caja","comprobante","encargos"] },
+  carniceria:{ nombre:"Carnicería", desc:"Vacuno, cerdo, pollo y embutidos por kilo", catalogo:[["carniceria"]], ext:["contar","recibir","compras","proveedores","vencimientos","granel","caja","comprobante","encargos"] },
+  verduleria:{ nombre:"Verdulería", desc:"Frutas y verduras por kilo", catalogo:[["verduleria"]], ext:["recibir","compras","proveedores","granel","caja","fiados"] },
+  botilleria:{ nombre:"Botillería", desc:"Bebidas, cervezas, vinos, licores y snacks", catalogo:[["emporio", ["Bebidas","Jugos","Snacks","Dulces","Helados"]], ["botilleria"]], ext:["contar","recibir","compras","proveedores","caja","ofertas","comprobante","personas"] },
+  otro:      { nombre:"Otro negocio", desc:"Empiezas sin productos y eliges qué usar", catalogo:[], ext:["contar","recibir","compras"] }
+};
+const ATAJOS_PAN = ["Marraqueta","Hallulla","Pan amasado"];
+const nuevoProd = (name, cat, kg) => Object.assign({ id:uid(), name, cat, price:0, cost:0, barcode:"", min:kg ? 2 : 3, has:true, countQty:null, countAt:null, estimated:false },
+  kg ? { kg:true } : {}, cat === "Pan" && ATAJOS_PAN.includes(name) ? { atajo:true } : {});
+// Productos de un tipo de negocio, sin repetir nombres (ni los que ya están en `ya`)
+function catalogoNegocio(tipo, ya = []){
+  const out = [], seen = new Set(ya.map(p => norm(p.name)));
+  const add = p => { const k = norm(p.name); if (seen.has(k)) return; seen.add(k); out.push(p); };
+  for (const [src, secs] of (NEGOCIOS[tipo] || NEGOCIOS.otro).catalogo){
+    if (src === "generico") buildSeed().products.forEach(p => { delete p.pop; delete p.prov; add(Object.assign(p, { countQty:null, countAt:null, has:true, barcode:"", estimated:false })); });
+    else (window.CATALOGOS?.[src] || []).filter(c => !secs || secs.includes(c[1])).forEach(([name, cat, kg]) => add(nuevoProd(name, cat, kg)));
+  }
+  return out;
+}
+const cuantosCatalogo = tipo => { const ps = catalogoNegocio(tipo); return { n:ps.length, sec:new Set(ps.map(p => p.cat)).size }; };
 
 // Catálogo precargado típico de almacén: [nombre, sector, precio venta, costo, popularidad 0-3, extras]
 // El pan y las verduras van por kilo (precio por kilo); cada tipo de pan se puede cambiar a "por unidad" en Tipos de pan
@@ -361,12 +399,12 @@ const EXT_TABLAS = ["vencimientos","cajas","proveedores","provmovs","ofertas","p
 async function commit(list){ await LocalDB.apply(list); meta.pending = await LocalDB.pendingCount(); Sync.syncSoon(); }
 
 // Crea la tienda en este dispositivo. inicio: "catalogo" | "vacio" | "ejemplo"
-async function createStore(nombre, persona, inicio, extensiones){
+async function createStore(nombre, persona, inicio, extensiones, tipo){
   const device = newDevice();
   const tienda = { id: uid(), nombre, persona, creada: Date.now() };
   let data;
   if (inicio === "ejemplo") data = buildSeed();
-  else data = { products: inicio === "catalogo" ? buildSeed().products.map(p => Object.assign(p, { countQty:null, countAt:null, has:true, barcode:"", estimated:false })) : [], movs:[], clients:[], reservas:[],
+  else data = { products: inicio === "catalogo" ? catalogoNegocio(tipo || "almacen") : [], movs:[], clients:[], reservas:[],
     panMsg: "🍞 ¡Llegó el pan calentito! Los esperamos en " + nombre + "." };
   data.products.forEach(p => { delete p.pop; if (inicio !== "ejemplo") delete p.prov; });
   // Los datos de ejemplo quedan solo en este dispositivo: no se envían al servidor
@@ -376,6 +414,7 @@ async function createStore(nombre, persona, inicio, extensiones){
     ...EXT_TABLAS.flatMap(k => ops(k, data[k] || [])),
     { store:"ajustes", value:{ clave:"tienda_nombre", valor:nombre } }, { store:"ajustes", value:{ clave:"mensaje_pan", valor:data.panMsg } }];
   if (extensiones) list.push({ store:"ajustes", value:{ clave:"extensiones", valor:extensiones } });
+  if (tipo) list.push({ store:"ajustes", value:{ clave:"tipo_negocio", valor:tipo } });
   list.forEach(o => o.local = local);
   await LocalDB.wipe();
   LocalDB.clock.device = device.id;
@@ -424,6 +463,7 @@ function ago(t){
 }
 function stockPill(p){
   if (!p.has) return '<span class="pill none">No lo tenemos</span>';
+  if (sectorOff(p.cat)) return '<span class="pill none">Sector apagado</span>';
   const s = stockOf(p);
   if (s == null) return '<span class="pill none">Sin contar</span>';
   const est = p.estimated ? " aprox." : "";
@@ -464,7 +504,8 @@ const act = {
       if (!prov){ prov = { id:uid(), nombre:supplier, telefono:"", dias:[], nota:"" }; extra.push(["proveedores", prov]); }
     }
     const movs = items.map(l => withWho(Object.assign({ id:uid(), pid:l.pid, type:"compra", qty:l.qty, at:now, cost:l.cost, supplier, grupo }, ext("vencimientos") && l.vence ? { vence:l.vence } : {})));
-    const prods = items.map(l => Object.assign({}, P(l.pid), { cost:l.cost, has:true }, prov && !P(l.pid).prov ? { prov:prov.id } : {}));
+    // El costo se actualiza con lo que se pagó; si se recibió por caja, queda guardado cuántas trae
+    const prods = items.map(l => Object.assign({}, P(l.pid), l.cost > 0 ? { cost:l.cost } : {}, { has:true }, prov && !P(l.pid).prov ? { prov:prov.id } : {}, l.caja?.por ? { porCaja:l.caja.por } : {}));
     if (ext("vencimientos")) items.filter(l => l.vence).forEach(l => extra.push(["vencimientos", { id:uid(), pid:l.pid, fecha:l.vence, qty:l.qty, done:false, at:now }]));
     const total = Math.round(items.reduce((a, l) => a + l.qty * l.cost, 0));
     if (prov && opts.debe && total > 0) extra.push(["provmovs", { id:uid(), prov:prov.id, type:"factura", amount:total, note:"Mercadería recibida", at:now }]);
@@ -635,7 +676,7 @@ function openScanSheet(cb, error){
 }
 function openAssociate(code, cb){
   const render = q => {
-    const items = S.products.filter(p => !p.barcode && p.name.toLowerCase().includes(q.toLowerCase())).slice(0, 8);
+    const r = buscar(q || " ", S.products.filter(p => !p.barcode)), items = (q.trim() ? [...r.exactos, ...r.parecidos] : S.products.filter(p => !p.barcode)).slice(0, 8);
     return items.map(p => `<button class="item tap" data-pid="${p.id}"><div class="main"><div class="name">${esc(p.name)}</div><div class="sub">${esc(p.cat)}</div></div><span class="btn sm">Es este</span></button>`).join("") || `<div class="empty">No hay coincidencias. Créalo como producto nuevo.</div>`;
   };
   openModal(`<div class="stack">
@@ -650,6 +691,31 @@ function openAssociate(code, cb){
   bind();
   $("#assocQ").oninput = e => { $("#assocList").innerHTML = render(e.target.value); bind(); };
   $("#assocNew").onclick = () => openProductForm(null, code, cb);
+}
+
+// Producto sin precio: se pregunta la primera vez que se vende y queda guardado
+function openPrecio(p, then){
+  openModal(`<div class="stack">
+    <div class="spread"><h2>${esc(p.name)}</h2><button class="btn ghost sm" data-close>Cerrar</button></div>
+    <p style="margin:0">Este producto todavía no tiene precio. ¿A cuánto lo vendes${p.kg ? " el kilo" : ""}?</p>
+    <input class="input" id="ppr" type="number" min="1" inputmode="numeric" placeholder="Ej: 1990" style="font-size:22px;font-weight:700;text-align:center">
+    <button class="btn primary block" id="pprok">Guardar precio y seguir</button>
+    <p class="small muted" style="margin:0">Queda guardado para las próximas ventas. Lo puedes cambiar en Productos.</p>
+  </div>`);
+  const ok = () => run(async () => { const v = Math.round(+$("#ppr").value || 0); if (v <= 0) return $("#ppr").focus();
+    await act.updateProduct(p, { price:v }); closeModal(); toast(`${p.name}: ${clp(v)}`); then(); });
+  $("#pprok").onclick = ok; $("#ppr").onkeydown = e => { if (e.key === "Enter") ok(); }; setTimeout(() => $("#ppr")?.focus(), 50);
+}
+// Sumar a una tienda que ya existe los productos de un catálogo que todavía no tiene
+function openSumarCatalogo(){
+  openModal(`<div class="stack">
+    <div class="spread"><h2>Sumar productos</h2><button class="btn ghost sm" data-close>Cerrar</button></div>
+    <p class="small muted" style="margin:0">Se agregan solo los que todavía no están (se comparan por nombre). Vienen sin precio y los que no vendas los puedes apagar.</p>
+    ${Object.entries(NEGOCIOS).filter(([k]) => k !== "otro").map(([k, n]) => { const c = catalogoNegocio(k, S.products).length;
+      return `<button class="choice" data-sum="${k}" ${c ? "" : "disabled"}>${esc(n.nombre)}<small>${c ? `${c} productos nuevos` : "Ya tienes todos"}</small></button>`; }).join("")}
+  </div>`);
+  document.querySelectorAll("[data-sum]").forEach(b => b.onclick = () => run(async () => { const rows = catalogoNegocio(b.dataset.sum, S.products);
+    await commit(ops("products", rows)); S.products.push(...rows); S.products.sort((a, b) => a.name.localeCompare(b.name, "es")); closeModal(); render(); toast(`${rows.length} productos agregados`); }));
 }
 
 // ---------- Modal ----------
@@ -676,6 +742,8 @@ const ICONS = {
   equipo:'<svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M16 4.6a3.2 3.2 0 0 1 0 6.3M18 14.4c1.8.9 3 3 3 5.6"/></svg>',
   reservas:'<svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>',
   pan:'<svg viewBox="0 0 24 24"><path d="M4 11a8 5 0 0 1 16 0v1.5a1.5 1.5 0 0 1-1.5 1.5H5.5A1.5 1.5 0 0 1 4 12.5z"/><path d="M9 8.5l-1 3M13 8l-.5 3.5M16.5 9l.5 2.5"/></svg>',
+  resumen:'<svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>',
+  ayuda:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6M12 17.2v.1"/></svg>',
   compras:'<svg viewBox="0 0 24 24"><path d="M8 4h8M8 4a2 2 0 0 0-2 2v14h12V6a2 2 0 0 0-2-2"/><path d="M9 10h6M9 14h6M9 18h3"/></svg>',
   vencimientos:'<svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4M12 13v3M12 18.2v.1"/></svg>',
   proveedores:'<svg viewBox="0 0 24 24"><path d="M2 6h11v10H2zM13 9h4l3 3v4h-7"/><circle cx="6" cy="18" r="1.8"/><circle cx="17" cy="18" r="1.8"/></svg>',
@@ -685,7 +753,7 @@ const ICONS = {
   encargos:'<svg viewBox="0 0 24 24"><path d="M4 8l8-4 8 4v8l-8 4-8-4z"/><path d="M4 8l8 4 8-4M12 12v8M8 6l8 4"/></svg>'
 };
 const LABELS = { inicio:"Inicio", vender:"Vender", contar:"Contar", productos:"Productos", fiados:"Fiados", mas:"Más" };
-const IN_MAS = ["mas","recibir","historial","reservas","tipospan","datos","extensiones","apariencia","compras","vencimientos","proveedores","caja","ofertas","personas","encargos"];
+const IN_MAS = ["mas","recibir","historial","resumen","reservas","tipospan","datos","extensiones","apariencia","compras","vencimientos","proveedores","caja","ofertas","personas","encargos"];
 // Pantallas que dependen de una extensión
 const VIEW_EXT = { contar:"contar", fiados:"fiados", recibir:"recibir", reservas:"pan", tipospan:"pan", compras:"compras", vencimientos:"vencimientos", proveedores:"proveedores",
   caja:"caja", ofertas:"ofertas", personas:"personas", encargos:"encargos" };
@@ -705,7 +773,7 @@ window.addEventListener("popstate", e => {
   if (document.querySelector(".overlay")){ closeModal(); history.pushState({ v:ui.view, sector:ui.sector, n:(e.state?.n || 0) + 1 }, ""); return; }
   ui.view = e.state?.v || "inicio"; ui.sector = e.state?.sector || null; render(); window.scrollTo(0,0);
 });
-function header(title, sub){ return `${IN_MAS.includes(ui.view) && ui.view !== "mas" ? backBtn() : ""}<header class="top"><h1 class="brandname">${esc(title)}<small>${esc(sub)}</small></h1><div class="hdr-r">${whoChip()}${netPill()}</div></header>`; }
+function header(title, sub){ return `${IN_MAS.includes(ui.view) && ui.view !== "mas" ? backBtn() : ""}<header class="top"><h1 class="brandname">${esc(title)}<small>${esc(sub)}</small></h1><div class="hdr-r">${AYUDA[ui.view] ? `<button class="btn sm ghost" data-ayuda aria-label="Cómo se usa esta pantalla" title="Cómo se usa">?</button>` : ""}${whoChip()}${netPill()}</div></header>`; }
 // Botón con el nombre de quien atiende (extensión "Quién atiende")
 const backBtn = () => `<div style="padding-top:12px"><button class="btn sm" data-back>← Regresar</button></div>`;
 const whoChip = () => ext("personas") && personasActivas().length ? `<button class="chip" data-go="personas" title="Cambiar quién atiende">${esc(nombrePersona(quien()) || "¿Quién atiende?")}</button>` : "";
@@ -719,7 +787,7 @@ function netPill(){
 const updateNet = () => document.querySelectorAll("header.top .net").forEach(el => el.outerHTML = netPill());
 
 function viewInicio(){
-  const avail = S.products.filter(p => p.has);
+  const avail = S.products.filter(disp);
   const counted = avail.filter(p => p.countAt != null);
   const pct = Math.round(counted.length / avail.length * 100);
   const d0 = new Date(); d0.setHours(0,0,0,0);
@@ -728,11 +796,12 @@ function viewInicio(){
   const low = counted.map(p => [p, stockOf(p)]).filter(([p,s]) => s <= p.min).sort((a,b)=>a[1]-b[1]);
   const week = {}; S.movs.filter(m => m.type==="venta" && m.at > Date.now()-7*D).forEach(m => week[m.pid] = (week[m.pid]||0) + m.qty);
   const top = Object.entries(week).filter(([id]) => P(id)).sort((a,b)=>b[1]-a[1]).slice(0,5);
-  const sectorState = SECTORS.filter(c => avail.some(p => p.cat === c)).map(c => { const ps = avail.filter(p => p.cat===c); const done = ps.length && ps.every(p => p.countAt!=null); return `<span class="pill ${done?"ok":"none"}">${done?"✓ ":""}${esc(c)}</span>`; }).join(" ");
+  const sectorState = sectores().filter(c => avail.some(p => p.cat === c)).map(c => { const ps = avail.filter(p => p.cat===c); const done = ps.length && ps.every(p => p.countAt!=null); return `<span class="pill ${done?"ok":"none"}">${done?"✓ ":""}${esc(c)}</span>`; }).join(" ");
   const resPend = S.reservas.filter(r => !r.done && r.at >= resCutoff());
   const pct0 = avail.length ? pct : 0;
   return `${header(S.ajustes.tienda_nombre || "Mi Almacén", meta.demo ? "Datos de ejemplo" : "Inventario y ventas")}
   <div class="stack">
+    ${!prefs().tourVisto ? `<div class="card spread"><div><b>¿Primera vez?</b><div class="small muted">Un recorrido de un minuto por lo principal.</div></div><div class="row" style="flex-wrap:nowrap"><button class="btn sm ghost" id="tourno">No, gracias</button><button class="btn sm primary" id="toursi">Ver tutorial</button></div></div>` : ""}
     ${meta.demo ? `<div class="demo-banner"><span>Estás probando con datos ficticios de ejemplo.</span><button class="btn sm" id="reset">Empezar mi tienda</button></div>` : ""}
     ${!avail.length ? `<div class="card stack"><h3>Primer paso: agrega tus productos</h3><p class="small muted" style="margin:0">Agrégalos uno por uno o escaneando su código de barras. Después cuenta un sector para que el sistema sepa cuánto tienes.</p><button class="btn primary block" data-go="productos">Agregar productos</button></div>` : ""}
     ${ext("pan") ? `<button class="panbtn" id="panbtn">${ICONS.pan}<span><b>Avisar que llegó el pan</b><small>Envía el mensaje al grupo de WhatsApp de clientes</small></span></button>` : ""}
@@ -764,17 +833,40 @@ function viewInicio(){
   </div>`;
 }
 
+// Búsqueda que no se fija en tildes, mayúsculas ni apóstrofes y aguanta una letra mal escrita.
+// Primero lo que empieza igual, después lo que tiene todas las palabras y al final los "Parecidos".
+const norm = s => String(s ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/['’`´]/g, "").replace(/\s+/g, " ").trim();
+function casi(a, b){ // ¿a y b difieren en una letra como máximo?
+  if (a === b) return true; const la = a.length, lb = b.length; if (Math.abs(la - lb) > 1) return false;
+  let i = 0, j = 0, d = 0;
+  while (i < la && j < lb){ if (a[i] === b[j]){ i++; j++; continue; } if (++d > 1) return false; if (la > lb) i++; else if (lb > la) j++; else { i++; j++; } }
+  return d + (la - i) + (lb - j) <= 1;
+}
+function buscar(q, list){
+  const nq = norm(q), code = String(q).trim(); if (!nq) return { exactos:[], parecidos:[] };
+  const words = nq.split(" "), a = [], b = [], c = [];
+  for (const p of list){
+    if (p.barcode && p.barcode === code){ a.unshift(p); continue; }
+    const n = norm(p.name);
+    if (n.startsWith(nq)) a.push(p);
+    else if (words.every(w => n.includes(w))) b.push(p);
+    else { const pw = n.split(/[ ,.\-()]+/);
+      if (words.every(w => n.includes(w) || (w.length >= 3 && pw.some(x => casi(w, x) || (x.length > w.length && casi(w, x.slice(0, w.length))))))) c.push(p); }
+  }
+  return { exactos:[...a, ...b], parecidos:c };
+}
 function searchResults(q, onPick, opts){
-  q = q.trim().toLowerCase();
-  if (!q) return "";
-  const res = S.products.filter(p => (opts?.all || p.has) && (p.name.toLowerCase().includes(q) || p.barcode === q)).slice(0, 8);
-  return res.map(p => `<button class="item tap" data-pick="${p.id}"><div class="main"><div class="name">${esc(p.name)}</div><div class="sub">${clp(p.price)}${p.kg ? " el kilo" : ""} · ${esc(p.cat)}</div></div>${stockPill(p)}</button>`).join("") || `<div class="empty">Sin resultados para “${esc(q)}”.</div>`;
+  if (!q.trim()) return "";
+  const r = buscar(q, S.products.filter(p => opts?.all || disp(p)));
+  const row = p => `<button class="item tap" data-pick="${p.id}"><div class="main"><div class="name">${esc(p.name)}</div><div class="sub">${p.price > 0 ? clp(p.price) + (p.kg ? " el kilo" : "") : "Sin precio"} · ${esc(p.cat)}</div></div>${stockPill(p)}</button>`;
+  return r.exactos.slice(0, 8).map(row).join("") + (r.parecidos.length ? `<div class="small muted" style="padding-top:8px;font-weight:600">Parecidos</div>` + r.parecidos.slice(0, 5).map(row).join("") : "")
+    || `<div class="empty">Sin resultados para “${esc(q.trim())}”.</div>`;
 }
 
 function viewVender(){
   const pr = pricing(ui.cart), caja = ext("caja");
   const last = ui.lastSale && ext("comprobante") ? `<div class="card spread"><div><div style="font-weight:700">Venta registrada: ${clp(ui.lastSale.total)}</div><div class="small muted">${ago(ui.lastSale.at)}</div></div><button class="btn sm" id="lastrec">Comprobante</button></div>` : "";
-  const quick = S.products.filter(p => p.atajo && p.has && (p.cat !== "Pan" || ext("pan")));
+  const quick = S.products.filter(p => p.atajo && disp(p) && (p.cat !== "Pan" || ext("pan")));
   return `${header("Vender", "Registrar una venta")}
   <div class="stack">
     ${quick.length ? `<div class="quick">${quick.map(p => `<button data-quick="${p.id}">${esc(p.name)}<small>${clp(p.price)}${p.kg ? " el kilo" : ""}</small></button>`).join("")}</div>` : ""}
@@ -800,6 +892,7 @@ function viewVender(){
 }
 const vuelto = total => { const v = Math.round(+ui.pagaCon || 0) - total; return ui.pagaCon === "" ? "—" : v < 0 ? `Faltan ${clp(-v)}` : clp(v); };
 function addToCart(p){
+  if (!(p.price > 0)) return openPrecio(p, () => addToCart(P(p.id)));
   if (p.kg) return openPeso(p, null, kg => { ui.cart.push({ pid:p.id, qty:kg }); closeModal(); render(); });
   const l = ui.cart.find(l => l.pid === p.id); if (l) l.qty++; else ui.cart.push({ pid:p.id, qty:1 }); render();
 }
@@ -811,13 +904,19 @@ function viewRecibir(){
     <div class="field"><label for="sup">Proveedor</label><input class="input" id="sup" value="${esc(ui.recv.supplier)}" ${ext("proveedores") ? `list="provlist" autocomplete="off"` : ""}>
       ${ext("proveedores") ? `<datalist id="provlist">${S.proveedores.map(x => `<option value="${esc(x.nombre)}">`).join("")}</datalist>` : ""}
       ${ext("proveedores") && S.proveedores.length ? `<div class="chips" style="flex-wrap:wrap;padding-top:4px">${S.proveedores.slice().sort((a, b) => a.nombre.localeCompare(b.nombre, "es")).map(x => `<button class="chip" data-sup="${esc(x.nombre)}" aria-pressed="${ui.recv.supplier.trim().toLowerCase() === x.nombre.trim().toLowerCase()}">${esc(x.nombre)}</button>`).join("")}</div>` : ""}</div>
+    ${(() => { const pr = ext("proveedores") && S.proveedores.find(x => x.nombre.trim().toLowerCase() === ui.recv.supplier.trim().toLowerCase()); const ps = pr ? S.products.filter(p => p.prov === pr.id && disp(p)) : [];
+      return ps.length ? `<div class="field"><label>Productos de ${esc(pr.nombre)}</label><div class="quick">${ps.map(p => `<button data-rpq="${p.id}" ${ui.recv.items.some(l => l.pid === p.id) ? 'aria-pressed="true" style="border-color:var(--brand)"' : ""}>${esc(p.name)}</button>`).join("")}</div></div>` : ""; })()}
     <div class="searchbar"><input class="input" id="q" placeholder="Buscar producto recibido" autocomplete="off"><button class="btn accent" id="scan">Escanear</button></div>
     <div class="list card" id="res" style="padding-block:0" hidden></div>
     <div class="card">
       <h3>Productos recibidos</h3>
-      ${ui.recv.items.length ? ui.recv.items.map((l,i) => { const p = P(l.pid), s = stockOf(p); return `<div class="countrow" style="grid-template-columns:1fr 80px 96px"><div style="min-width:0"><div style="font-weight:600">${esc(p.name)}</div><div class="small muted">Stock actual: ${s == null ? "sin contar" : fq(p, s)}</div></div>
-        <input class="input" type="number" min="0" ${p.kg ? `step="any" inputmode="decimal"` : `inputmode="numeric"`} value="${l.qty}" data-rq="${i}" aria-label="Cantidad${p.kg ? " en kilos" : ""}">
-        <input class="input" type="number" min="0" inputmode="numeric" value="${l.cost}" data-rc="${i}" aria-label="Costo ${p.kg ? "por kilo" : "unitario"}">
+      ${ui.recv.items.length ? ui.recv.items.map((l,i) => { const p = P(l.pid), s = stockOf(p), cj = l.caja; return `<div class="countrow" style="grid-template-columns:1fr 80px 96px"><div style="min-width:0"><div style="font-weight:600">${esc(p.name)}</div><div class="small muted">Stock actual: ${s == null ? "sin contar" : fq(p, s)}${l.cost > 0 ? "" : ' · <span class="pill warn">Sin costo</span>'}</div></div>
+        <input class="input" type="number" min="0" ${p.kg ? `step="any" inputmode="decimal"` : `inputmode="numeric"`} value="${l.qty}" data-rq="${i}" aria-label="Cantidad${p.kg ? " en kilos" : ""}" ${cj ? "disabled" : ""}>
+        <input class="input" type="number" min="0" inputmode="numeric" value="${l.cost}" data-rc="${i}" aria-label="Costo ${p.kg ? "por kilo" : "unitario"}" ${cj ? "disabled" : ""}>
+        ${p.kg ? "" : `<div class="opts"><label><input type="checkbox" data-rcaja="${i}" ${cj ? "checked" : ""}> Por caja</label>
+          ${cj ? `<input class="input" type="number" min="0" inputmode="numeric" data-rcn="${i}" value="${cj.n || ""}" placeholder="cajas" aria-label="Cajas" style="width:64px;font-size:14px;padding:6px">
+          × <input class="input" type="number" min="0" inputmode="numeric" data-rcu="${i}" value="${cj.por || ""}" placeholder="unid." aria-label="Unidades por caja" style="width:64px;font-size:14px;padding:6px">
+          a <input class="input" type="number" min="0" inputmode="numeric" data-rcp="${i}" value="${cj.precio || ""}" placeholder="$ caja" aria-label="Precio de la caja" style="width:88px;font-size:14px;padding:6px">` : ""}</div>`}
         ${ext("vencimientos") ? `<div class="opts"><label for="rv${i}">Vence el</label><input class="input" type="date" id="rv${i}" data-rv="${i}" value="${esc(l.vence || "")}" style="width:auto;text-align:left;font-weight:400;font-size:14px;padding:6px 8px"><span class="muted">opcional</span></div>` : ""}</div>`; }).join("") +
         `<div class="row small muted" style="justify-content:flex-end;gap:24px;padding-top:6px"><span>cantidad</span><span>costo c/u</span></div>`
         : `<div class="empty">Agrega los productos de la factura. Ejemplo: 2 cajas de Coca-Cola 1,5 L = 24 unidades.</div>`}
@@ -834,7 +933,7 @@ function viewContar(){
     return `${header("Contar sector", "Carga del stock, un sector a la vez")}
     <div class="stack">
       <p class="muted" style="margin:0">Elige el sector que vas a contar ahora. Lo ideal es contar al abrir o al cerrar, unos 20 a 30 minutos por sector.</p>
-      ${SECTORS.filter(c => S.products.some(p => p.cat === c && p.has)).map(c => { const ps = S.products.filter(p => p.cat===c && p.has); const done = ps.filter(p => p.countAt!=null);
+      ${sectores().filter(c => S.products.some(p => p.cat === c && disp(p))).map(c => { const ps = S.products.filter(p => p.cat===c && disp(p)); const done = ps.filter(p => p.countAt!=null);
         const last = done.length ? Math.max(...done.map(p=>p.countAt)) : null;
         const sold = ps.filter(p => p.countAt==null).reduce((a,p)=>a+pendingSales(p),0);
         return `<button class="sector" data-sector="${esc(c)}"><span class="name">${esc(c)}</span>
@@ -846,16 +945,44 @@ function viewContar(){
   return `<header class="top"><button class="btn sm" id="back">← Sectores</button><span class="small muted">${ps.filter(p=>p.has).length} productos</span></header>
   <div class="stack">
     <div><h2>Contando: ${esc(ui.sector)}</h2><p class="small muted" style="margin:4px 0 0">Escribe lo que hay en la estantería. Cada escaneo suma 1. Lo que no tengan, márcalo y desaparece de las listas.</p></div>
-    <div class="row"><button class="btn accent" id="scan">Escanear (+1)</button><button class="btn" id="addp">+ Agregar producto</button></div>
+    <div class="row"><button class="btn accent" id="scan">Escanear</button><button class="btn" id="addp">+ Agregar producto</button></div>
+    <div class="field"><label>Al escanear</label><div class="seg" role="group"><button data-sask="0" aria-pressed="${!prefs().scanAsk}">Suma 1 cada vez</button><button data-sask="1" aria-pressed="${!!prefs().scanAsk}">Preguntar cantidad</button></div></div>
     <div class="card" style="padding-block:4px">
       ${ps.map(p => { const d = ui.draft[p.id] || {}; const off = d.none ?? !p.has; const prev = stockOf(p);
         return `<div class="countrow ${off?"off":""}"><div style="min-width:0"><div style="font-weight:600">${esc(p.name)}</div><div class="small muted">${off ? "No lo tenemos" : prev==null ? "Sin contar" : `Sistema dice: ${fq(p, prev)}${p.estimated?" (aprox.)":""}`}</div></div>
           <input class="input" type="number" min="0" ${p.kg ? `step="any" inputmode="decimal"` : `inputmode="numeric"`} placeholder="${p.kg ? "kg" : "—"}" value="${d.qty ?? ""}" data-cq="${p.id}" ${off?"disabled":""} aria-label="Cantidad de ${esc(p.name)}">
           <div class="opts"><label><input type="checkbox" data-ce="${p.id}" ${d.est?"checked":""} ${off?"disabled":""}> Es aproximado</label>
+          ${p.kg || off ? "" : `<button class="btn sm" data-cbox="${p.id}">Cajas ×</button>`}
           <button class="btn sm ghost" data-cn="${p.id}">${off ? "Sí lo tenemos" : "No lo tenemos"}</button></div></div>`; }).join("")}
     </div>
     <button class="btn primary block" id="finish">Terminar conteo</button>
   </div>`;
+}
+// Escaneo en el conteo: suma 1, o pregunta la cantidad (útil con cajas)
+function scanCount(p){
+  if (p.cat !== ui.sector) toast(`${p.name} es del sector ${p.cat}; se cuenta igual`);
+  if (prefs().scanAsk || p.kg) return openCantidad(p);
+  if (p.cat === ui.sector) toast(`+1 ${p.name}`);
+  const d = (ui.draft[p.id] ||= {}); d.qty = String((num(d.qty) || 0) + 1); d.none = false; rerender();
+}
+// Cantidad contada, escrita directo o como cajas × unidades + sueltas
+function openCantidad(p){
+  const d = ui.draft[p.id] || {};
+  openModal(`<div class="stack">
+    <div class="spread"><h2>${esc(p.name)}</h2><button class="btn ghost sm" data-close>Cerrar</button></div>
+    <div class="field"><label for="ctot">Cantidad${p.kg ? " en kilos" : ""}</label><input class="input" id="ctot" type="number" min="0" ${p.kg ? 'step="any" inputmode="decimal"' : 'inputmode="numeric"'} value="${esc(d.qty ?? "")}" style="font-size:22px;font-weight:700;text-align:center"></div>
+    ${p.kg ? "" : `<div><h3>O por cajas</h3><div class="row" style="flex-wrap:nowrap;gap:6px;align-items:end;padding-top:6px">
+      <div class="field" style="flex:1"><label for="ccj">Cajas</label><input class="input" id="ccj" type="number" min="0" inputmode="numeric"></div><span style="padding-bottom:10px">×</span>
+      <div class="field" style="flex:1"><label for="ccu">Unidades</label><input class="input" id="ccu" type="number" min="0" inputmode="numeric" value="${p.porCaja || ""}"></div><span style="padding-bottom:10px">+</span>
+      <div class="field" style="flex:1"><label for="ccs">Sueltas</label><input class="input" id="ccs" type="number" min="0" inputmode="numeric"></div></div></div>`}
+    <button class="btn primary block" id="cok">Listo</button>
+  </div>`);
+  const cajas = () => { const t = Math.round(+$("#ccj").value || 0) * Math.round(+$("#ccu").value || 0) + Math.round(+$("#ccs").value || 0); if ($("#ccj").value || $("#ccs").value) $("#ctot").value = t; };
+  if (!p.kg) ["#ccj","#ccu","#ccs"].forEach(id => $(id).oninput = cajas);
+  const ok = () => run(async () => { const v = $("#ctot").value; const dd = (ui.draft[p.id] ||= {}); dd.qty = v; dd.none = false;
+    const por = p.kg ? 0 : Math.round(+$("#ccu").value || 0); if (por && por !== p.porCaja && $("#ccj").value) await act.updateProduct(p, { porCaja:por });
+    closeModal(); rerender(); });
+  $("#cok").onclick = ok; $("#ctot").onkeydown = e => { if (e.key === "Enter") ok(); }; setTimeout(() => $(p.kg || !p.porCaja ? "#ctot" : "#ccj")?.focus(), 50);
 }
 function finishCount(){ run(async () => {
   const { n, diffs } = await act.count(ui.draft);
@@ -871,14 +998,21 @@ function finishCount(){ run(async () => {
 }); }
 
 function viewProductos(){
-  const q = ui.prodQuery.toLowerCase();
-  const list = S.products.filter(p => (ui.prodFilter==="Todos" || p.cat===ui.prodFilter) && p.name.toLowerCase().includes(q));
-  return `${header("Productos", `${S.products.filter(p=>p.has).length} productos en el catálogo`)}
+  const f = ui.prodFilter, secs = sectores();
+  if (f !== "Todos" && f !== "Sin precio" && f !== "Apagados" && !secs.includes(f)) ui.prodFilter = "Todos";
+  let list = S.products.filter(p => ui.prodFilter === "Todos" || (ui.prodFilter === "Sin precio" ? disp(p) && !(p.price > 0) : ui.prodFilter === "Apagados" ? !disp(p) : p.cat === ui.prodFilter));
+  if (ui.prodQuery.trim()){ const r = buscar(ui.prodQuery, list); list = [...r.exactos, ...r.parecidos]; }
+  const sinPrecio = S.products.filter(p => disp(p) && !(p.price > 0)).length, apagados = S.products.filter(p => !disp(p)).length;
+  const sec = secs.includes(ui.prodFilter) ? ui.prodFilter : null;
+  return `${header("Productos", `${S.products.filter(disp).length} productos a la venta`)}
   <div class="stack">
     <div class="searchbar"><input class="input" id="pq" placeholder="Buscar" value="${esc(ui.prodQuery)}"><button class="btn primary" id="addp">+ Agregar</button></div>
-    <div class="chips">${["Todos",...SECTORS].map(c => `<button class="chip" data-f="${esc(c)}" aria-pressed="${ui.prodFilter===c}">${esc(c)}</button>`).join("")}</div>
-    <div class="card" style="padding-block:0"><div class="list" id="plist">${list.map(p => `<button class="item tap" data-open="${p.id}"><div class="main"><div class="name">${esc(p.name)}</div><div class="sub">${clp(p.price)}${p.kg ? " el kilo" : ""} · ${esc(p.cat)}${p.barcode?" · con código":""}</div></div>${stockPill(p)}</button>`).join("") || `<div class="empty">Sin resultados.</div>`}</div></div>
-    <p class="small muted" style="margin:0">El catálogo viene precargado con productos típicos de almacén. Los nombres y precios se ajustan a lo que vende la tienda.</p>
+    <div class="chips">${["Todos", ...(sinPrecio ? ["Sin precio"] : []), ...(apagados ? ["Apagados"] : []), ...secs].map(c => `<button class="chip" data-f="${esc(c)}" aria-pressed="${ui.prodFilter===c}" ${sectorOff(c) ? 'style="text-decoration:line-through"' : ""}>${esc(c)}${c === "Sin precio" ? ` (${sinPrecio})` : c === "Apagados" ? ` (${apagados})` : ""}</button>`).join("")}</div>
+    ${sec ? `<div class="card spread small"><span>${sectorOff(sec) ? `El sector <b>${esc(sec)}</b> está apagado: sus productos no salen en Vender, Contar ni en las listas.` : `Sector <b>${esc(sec)}</b>: ${list.length} productos.`}</span>
+      <button class="btn sm" id="secoff">${sectorOff(sec) ? "Prender sector" : "Apagar sector"}</button></div>` : ""}
+    <div class="card" style="padding-block:0"><div class="list" id="plist">${list.map(p => `<button class="item tap" data-open="${p.id}"><div class="main"><div class="name">${esc(p.name)}</div><div class="sub">${p.price > 0 ? clp(p.price) + (p.kg ? " el kilo" : "") : '<b style="color:var(--warn)">Sin precio</b>'} · ${esc(p.cat)}${p.barcode?" · con código":""}</div></div>${stockPill(p)}</button>`).join("") || `<div class="empty">Sin resultados.</div>`}</div></div>
+    <p class="small muted" style="margin:0">Lo que no vendas, apágalo: en la ficha de cada producto, o un sector completo eligiéndolo arriba. Nada se borra.</p>
+    <button class="btn ghost block" id="addcat">Sumar productos de un catálogo</button>
   </div>`;
 }
 function openProduct(p){
@@ -891,11 +1025,14 @@ function openProduct(p){
       <div class="field"><label for="ec">Costo${p.kg ? " (kilo)" : ""}</label><input class="input" id="ec" type="number" value="${p.cost}"></div>
       <div class="field"><label for="em">Stock mínimo${p.kg ? " (kg)" : ""}</label><input class="input" id="em" type="number" step="any" value="${p.min}"></div>
       <div class="field"><label for="eb">Código de barras</label><input class="input code" id="eb" value="${esc(p.barcode)}" placeholder="Sin código"></div>
+      ${p.kg ? "" : `<div class="field"><label for="epc">Unidades por caja</label><input class="input" id="epc" type="number" min="0" inputmode="numeric" value="${p.porCaja || ""}" placeholder="Opcional"></div>`}
+      <div class="field"><label for="esec">Sector</label><input class="input" id="esec" list="seclist2" value="${esc(p.cat)}" autocomplete="off"><datalist id="seclist2">${[...new Set([...sectores(), ...ORDEN_SECTORES])].map(c => `<option value="${esc(c)}">`).join("")}</datalist></div>
     </div>
     <div class="field"><label for="en">Nombre</label><input class="input" id="en" value="${esc(p.name)}"></div>
     ${ext("proveedores") ? `<div class="field"><label for="eprov">Proveedor</label><select class="input" id="eprov"><option value="">Sin proveedor</option>${S.proveedores.map(x => `<option value="${x.id}" ${p.prov === x.id ? "selected" : ""}>${esc(x.nombre)}</option>`).join("")}</select></div>` : ""}
     ${ext("granel") || p.kg ? `<label class="row small"><input type="checkbox" id="ekg" ${p.kg ? "checked" : ""}> Se vende por kilo (a granel)</label>` : ""}
     <label class="row small"><input type="checkbox" id="eat" ${p.atajo ? "checked" : ""}> Botón rápido en Vender</label>
+    <label class="row small"><input type="checkbox" id="ehas" ${p.has ? "checked" : ""}> Lo vendemos (si lo desmarcas, sale de Vender, Contar y las listas)</label>
     <button class="btn primary block" id="esave">Guardar cambios</button>
     ${ext("vencimientos") ? `<button class="btn block" id="evenc">Anotar vencimiento</button>` : ""}
     <div><h3>Últimos movimientos</h3><div class="list" id="phist">${hist.map(movRow).join("") || `<div class="empty">Sin movimientos.</div>`}</div></div>
@@ -904,7 +1041,8 @@ function openProduct(p){
     const f = { price:+$("#ep").value||0, cost:+$("#ec").value||0, min:num($("#em").value), barcode:$("#eb").value.trim(), name:$("#en").value.trim() || p.name };
     if ($("#eprov")) f.prov = $("#eprov").value;
     if ($("#ekg")) f.kg = $("#ekg").checked;
-    f.atajo = $("#eat").checked;
+    f.atajo = $("#eat").checked; f.has = $("#ehas").checked; f.cat = $("#esec").value.trim() || p.cat;
+    if ($("#epc")) f.porCaja = Math.round(+$("#epc").value || 0);
     Object.assign(f, cambioUnidad(p, f.kg));
     await act.updateProduct(p, f);
     closeModal(); toast("Producto actualizado"); render(); });
@@ -915,7 +1053,8 @@ function openProductForm(sector, code, cb){
     <div class="spread"><h2>Agregar producto</h2><button class="btn ghost sm" data-close>Cerrar</button></div>
     <div class="field"><label for="nn">Nombre</label><input class="input" id="nn" placeholder="Ej: Bebida Bilz 2 L"></div>
     <div class="grid2">
-      <div class="field"><label for="ns">Sector</label><select class="input" id="ns">${SECTORS.map(c => `<option ${c===(sector||ui.sector)?"selected":""}>${esc(c)}</option>`).join("")}</select></div>
+      <div class="field"><label for="ns">Sector</label><input class="input" id="ns" list="seclist" value="${esc(sector || ui.sector || "")}" placeholder="Ej: Bebidas" autocomplete="off">
+        <datalist id="seclist">${[...new Set([...sectores(), ...ORDEN_SECTORES])].map(c => `<option value="${esc(c)}">`).join("")}</datalist></div>
       <div class="field"><label for="np">Precio venta</label><input class="input" id="np" type="number" inputmode="numeric" placeholder="0"></div>
       <div class="field"><label for="nb">Código de barras</label><input class="input code" id="nb" value="${esc(code||"")}" placeholder="Opcional"></div>
       <div class="field"><label for="nq">Cantidad ahora</label><input class="input" id="nq" type="number" step="any" inputmode="decimal" placeholder="Opcional"></div>
@@ -926,7 +1065,7 @@ function openProductForm(sector, code, cb){
   </div>`);
   $("#nsave").onclick = () => run(async () => {
     const name = $("#nn").value.trim(); if (!name){ $("#nn").focus(); return; }
-    const p = await act.newProduct({ name, cat:$("#ns").value, price:+$("#np").value || 0, barcode:$("#nb").value.trim(), kg:!!$("#nkg")?.checked }, $("#nq").value);
+    const p = await act.newProduct({ name, cat:$("#ns").value.trim() || "Otros", price:+$("#np").value || 0, barcode:$("#nb").value.trim(), kg:!!$("#nkg")?.checked }, $("#nq").value);
     closeModal(); toast(`${name} agregado`);
     if (cb) cb(p); else render();
   });
@@ -1033,7 +1172,7 @@ function openPan(){
 
 // ---------- Reservas (vista previa) ----------
 // Los panes que se pueden reservar son los productos del sector Pan marcados así en Tipos de pan
-const panesReserva = () => S.products.filter(p => p.cat === "Pan" && p.has && p.reserva !== false).sort((a, b) => a.name.localeCompare(b.name, "es"));
+const panesReserva = () => S.products.filter(p => p.cat === "Pan" && disp(p) && p.reserva !== false).sort((a, b) => a.name.localeCompare(b.name, "es"));
 function resCutoff(){ const d = new Date(); d.setHours(RES_CUT_HOUR,0,0,0); if (d.getTime() > Date.now()) d.setDate(d.getDate()-1); return d.getTime(); }
 // Las reservas viejas se sacan de la vista y de este dispositivo (sin enviarlo como cambio)
 function purgeReservas(){ const cut = resCutoff(), old = S.reservas.filter(r => !r.at || r.at < cut); if (!old.length) return;
@@ -1410,7 +1549,7 @@ const sugerido = (p, s) => { const q = Math.max(1, p.min * 2 - Math.max(0, s ?? 
 const provDe = p => ext("proveedores") ? S.proveedores.find(x => x.id === p.prov) : null;
 function comprasGrupos(){
   const c = ui.compras;
-  const sug = S.products.filter(p => p.has && !c.quitar[p.id]).map(p => [p, stockOf(p)]).filter(([p, s]) => s != null && s <= p.min);
+  const sug = S.products.filter(p => disp(p) && !c.quitar[p.id]).map(p => [p, stockOf(p)]).filter(([p, s]) => s != null && s <= p.min);
   const ids = new Set(sug.map(([p]) => p.id));
   const extra = Object.keys(c.extra).filter(id => !ids.has(id) && P(id)).map(id => [P(id), stockOf(P(id))]);
   const groups = {};
@@ -1425,7 +1564,7 @@ function viewCompras(){
   <div class="stack">
     ${!contados ? `<div class="card small">Para saber qué falta, la app necesita saber cuánto hay: cuenta al menos un sector${ext("contar") ? " en Contar" : " (activa Conteo por sectores en Extensiones)"}. Mientras tanto, agrega productos a mano.</div>` : ""}
     ${gs.map(g => `<div class="card stack"><div class="spread"><h3>${g.pr ? esc(g.pr.nombre) : ext("proveedores") ? "Sin proveedor asignado" : "Para comprar"}</h3><span class="small muted">${g.items.length} productos</span></div>
-      <div>${g.items.map(l => `<div class="cartline"><div style="min-width:0"><div style="font-weight:600">${esc(l.p.name)}</div><div class="small muted">${l.s == null ? "Sin contar" : l.s <= 0 ? "Agotado" : "Quedan " + fq(l.p, l.s)} · mínimo ${fq(l.p, l.p.min)}</div></div>
+      <div>${g.items.map(l => `<div class="cartline"><div style="min-width:0"><div style="font-weight:600">${esc(l.p.name)}</div><div class="small muted">${l.s == null ? "Sin contar" : l.s <= 0 ? "Agotado" : "Quedan " + fq(l.p, l.s)} · <label>mínimo <input class="input" type="number" min="0" step="any" inputmode="decimal" value="${l.p.min}" data-cmin="${l.p.id}" aria-label="Stock mínimo de ${esc(l.p.name)}" style="width:56px;padding:2px 4px;font-size:13px;display:inline-block"></label></div></div>
         <input class="input" style="width:76px;text-align:center;font-weight:700" type="number" min="0" step="any" inputmode="decimal" value="${l.qty}" data-cqty="${l.p.id}" aria-label="Cantidad a pedir de ${esc(l.p.name)}">
         <button class="btn sm ghost" data-cx="${l.p.id}" aria-label="Quitar ${esc(l.p.name)} de la lista">×</button></div>`).join("")}</div>
       <div class="grid2"><a class="btn" style="text-align:center" href="${esc(waLink(g.pr?.telefono || "", pedidoTexto(g)))}" ${WA_TARGET}>Pedir por WhatsApp</a><button class="btn" data-ccopy="${g.k}">Copiar lista</button></div>
@@ -1439,6 +1578,8 @@ function viewCompras(){
 function bindCompras(app){
   const c = ui.compras;
   app.querySelectorAll("[data-cqty]").forEach(i => i.onchange = () => { c.qty[i.dataset.cqty] = Math.max(0, num(i.value)); rerender(); });
+  app.querySelectorAll("[data-cmin]").forEach(i => i.onchange = () => run(async () => { const p = P(i.dataset.cmin); await act.updateProduct(p, { min:Math.max(0, num(i.value)) });
+    delete c.qty[p.id]; rerender(); toast(`Mínimo de ${p.name}: ${fq(p, p.min)}`); }));
   app.querySelectorAll("[data-cx]").forEach(b => b.onclick = () => { const id = b.dataset.cx; if (id in c.extra) delete c.extra[id]; else c.quitar[id] = true; delete c.qty[id]; rerender(); });
   app.querySelectorAll("[data-ccopy]").forEach(b => b.onclick = () => copiar(pedidoTexto(comprasGrupos().find(g => g.k === b.dataset.ccopy)), "Lista copiada"));
   app.querySelectorAll("[data-crecv]").forEach(b => b.onclick = () => { const g = comprasGrupos().find(g => g.k === b.dataset.crecv);
@@ -1481,10 +1622,12 @@ function openProveedor(pr){
     <div class="field"><label>Días que pasa</label><div class="chips" style="flex-wrap:wrap">${ORDEN_DIAS.map(d => `<button class="chip" data-pvd="${d}" aria-pressed="${dias.has(d)}">${DIAS[d]}</button>`).join("")}</div></div>
     <div class="field"><label for="pvnota">Nota</label><input class="input" id="pvnota" value="${esc(pr.nota || "")}" placeholder="Ej: hacer el pedido el martes antes de las 12"></div>
     <button class="btn ${nuevo ? "primary" : ""} block" id="pvsave">${nuevo ? "Guardar proveedor" : "Guardar datos"}</button>
-    ${nuevo ? "" : `<div><h3>Productos que trae</h3><p class="small muted" style="margin:4px 0 0">${prods.length ? prods.map(p => esc(p.name)).join(", ") : "Se asignan solos al recibir mercadería de este proveedor, o en la ficha de cada producto."}</p></div>
+    ${nuevo ? "" : `<div class="stack" style="gap:8px"><div class="spread"><h3>Productos y ganancia</h3><button class="btn sm" id="pvlote">Elegir productos</button></div>
+      ${prods.length ? costosTabla(prods) : `<p class="small muted" style="margin:0">Se asignan aquí, solos al recibir mercadería de este proveedor, o en la ficha de cada producto.</p>`}</div>
     <div><h3>Facturas y pagos</h3><div class="list">${ms.map(m => `<div class="item"><div class="main"><div class="name">${m.type === "factura" ? esc(m.note || "Factura") : "Pago" + (m.note ? " · " + esc(m.note) : "")}</div><div class="sub">${ago(m.at)}</div></div><span class="diff" style="color:${m.type === "factura" ? "var(--bad)" : "var(--ok)"}">${m.type === "factura" ? "+" : "−"}${clp(m.amount)}</span></div>`).join("") || `<div class="empty">Sin movimientos.</div>`}</div></div>`}
   </div>`);
   const again = () => openProveedor(S.proveedores.find(x => x.id === pr.id));
+  const lb = $("#pvlote"); if (lb) lb.onclick = () => openProvProductos(pr);
   document.querySelectorAll("[data-pvd]").forEach(b => b.onclick = () => { const d = +b.dataset.pvd; dias.has(d) ? dias.delete(d) : dias.add(d); b.setAttribute("aria-pressed", dias.has(d)); });
   $("#pvsave").onclick = () => run(async () => { const nombre = $("#pvnom").value.trim(); if (!nombre) return $("#pvnom").focus();
     await act.put("proveedores", [Object.assign({}, pr, { nombre, telefono:$("#pvtel").value.trim(), dias:[...dias].sort(), nota:$("#pvnota").value.trim() })]);
@@ -1492,6 +1635,36 @@ function openProveedor(pr){
   if (!nuevo){ const mov = type => run(async () => { const a = Math.round(+$("#pvm").value || 0); if (a <= 0) return $("#pvm").focus();
       await act.put("provmovs", [withWho({ id:uid(), prov:pr.id, type, amount:a, note:$("#pvn").value.trim(), at:LocalDB.now() })]); toast(type === "factura" ? `Factura anotada: ${clp(a)}` : `Pago registrado: ${clp(a)}`); render(); again(); });
     $("#pvf").onclick = () => mov("factura"); $("#pvp").onclick = () => mov("pago"); }
+}
+
+// Costo, precio y ganancia de cada producto, agrupados por sector
+function costosTabla(prods){
+  const by = {}; prods.forEach(p => (by[p.cat] ||= []).push(p));
+  return sectores().filter(c => by[c]).map(c => `<div><div class="small" style="font-weight:700;padding-top:4px">${esc(c)}</div><div class="list">${by[c].sort((a, b) => a.name.localeCompare(b.name, "es")).map(p => {
+    const g = p.price - p.cost, pct = p.price > 0 ? Math.round(g / p.price * 100) : 0;
+    return `<div class="item" style="padding:8px 0"><div class="main"><div class="name" style="font-size:14px">${esc(p.name)}</div><div class="sub">Costo ${p.cost > 0 ? clp(p.cost) + (p.porCaja ? ` (caja de ${p.porCaja}: ${clp(p.cost * p.porCaja)})` : "") : "sin anotar"} · precio ${p.price > 0 ? clp(p.price) : "sin precio"}${p.kg ? " el kilo" : ""}</div></div>
+      ${p.cost > 0 && p.price > 0 ? `<span class="pill ${g > 0 ? "ok" : "bad"}">${g > 0 ? "gana" : "pierde"} ${clp(Math.abs(g))} · ${pct}%</span>` : `<span class="pill none">—</span>`}</div>`; }).join("")}</div></div>`).join("")
+    + `<p class="small muted" style="margin:0">El % es la ganancia sobre el precio de venta. El costo se actualiza solo al recibir mercadería.</p>`;
+}
+// Asignar varios productos a un proveedor de una vez
+function openProvProductos(pr){
+  const sel = new Set(S.products.filter(p => p.prov === pr.id).map(p => p.id));
+  const lista = q => { const ps = S.products.filter(disp), r = q.trim() ? (x => [...x.exactos, ...x.parecidos])(buscar(q, ps)) : ps, by = {};
+    r.forEach(p => (by[p.cat] ||= []).push(p));
+    return sectores().filter(c => by[c]).map(c => `<div class="small" style="font-weight:700;padding-top:8px">${esc(c)} <button class="btn sm ghost" data-pvall="${esc(c)}">todos</button></div>${by[c].map(p => `<label class="row small" style="padding:6px 0;flex-wrap:nowrap"><input type="checkbox" data-pvsel="${p.id}" ${sel.has(p.id) ? "checked" : ""}> <span>${esc(p.name)}${p.prov && p.prov !== pr.id ? ` <span class="muted">(${esc(S.proveedores.find(x => x.id === p.prov)?.nombre || "otro")})</span>` : ""}</span></label>`).join("")}`).join("") || `<div class="empty">Sin resultados.</div>`; };
+  openModal(`<div class="stack">
+    <div class="spread"><h2>Productos de ${esc(pr.nombre)}</h2><button class="btn ghost sm" data-close>Cerrar</button></div>
+    <input class="input" id="pvq" placeholder="Buscar" autocomplete="off">
+    <div id="pvlist" style="max-height:50vh;overflow-y:auto">${lista("")}</div>
+    <button class="btn primary block" id="pvlsave">Guardar</button>
+  </div>`);
+  const bind = () => { document.querySelectorAll("[data-pvsel]").forEach(i => i.onchange = () => i.checked ? sel.add(i.dataset.pvsel) : sel.delete(i.dataset.pvsel));
+    document.querySelectorAll("[data-pvall]").forEach(b => b.onclick = () => { const ids = [...document.querySelectorAll("[data-pvsel]")].filter(i => P(i.dataset.pvsel).cat === b.dataset.pvall);
+      const all = ids.every(i => i.checked); ids.forEach(i => { i.checked = !all; all ? sel.delete(i.dataset.pvsel) : sel.add(i.dataset.pvsel); }); }); };
+  bind(); $("#pvq").oninput = e => { $("#pvlist").innerHTML = lista(e.target.value); bind(); };
+  $("#pvlsave").onclick = () => run(async () => {
+    const ch = S.products.filter(p => sel.has(p.id) ? p.prov !== pr.id : p.prov === pr.id).map(p => Object.assign({}, p, { prov:sel.has(p.id) ? pr.id : "" }));
+    await commit(ops("products", ch)); ch.forEach(v => Object.assign(P(v.id), v)); render(); openProveedor(S.proveedores.find(x => x.id === pr.id)); toast(`${ch.length} productos actualizados`); });
 }
 
 // ---------- Encargos ----------
@@ -1592,6 +1765,161 @@ function openTipoPan(p){
       S.products.sort((a, b) => a.name.localeCompare(b.name, "es")); }
     else { f.has = !$("#tpoff").checked; Object.assign(f, cambioUnidad(p, kg)); await act.updateProduct(p, f); }
     closeModal(); render(); toast(nuevo ? `${name} agregado` : "Guardado"); });
+}
+
+// ---------- Resumen de ventas ----------
+const PERIODOS = { hoy:"Hoy", d7:"7 días", mes:"Este mes", mesp:"Mes pasado", anio:"Este año", aniop:"Año pasado" };
+const MESES = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
+function rango(k){
+  const n = new Date(), y = n.getFullYear(), m = n.getMonth(), d0 = new Date(y, m, n.getDate()).getTime();
+  return { hoy:[d0, Infinity], d7:[d0 - 6*D, Infinity], mes:[new Date(y, m, 1).getTime(), Infinity], mesp:[new Date(y, m - 1, 1).getTime(), new Date(y, m, 1).getTime()],
+    anio:[new Date(y, 0, 1).getTime(), Infinity], aniop:[new Date(y - 1, 0, 1).getTime(), new Date(y, 0, 1).getTime()] }[k];
+}
+function resumen(k){
+  const [a, b] = rango(k), ms = S.movs.filter(m => m.type === "venta" && m.at >= a && m.at < b);
+  const grupos = new Set(ms.map(m => m.grupo || m.id)), total = ms.reduce((t, m) => t + m.qty * m.price, 0);
+  let gan = 0, sinCosto = new Set();
+  ms.forEach(m => { const p = P(m.pid); if (p?.cost > 0) gan += m.qty * (m.price - p.cost); else sinCosto.add(m.pid); });
+  const pago = {}; ms.forEach(m => { const k2 = m.pago || "sin"; pago[k2] = (pago[k2] || 0) + m.qty * m.price; });
+  const porMes = k === "anio" || k === "aniop", tramos = {};
+  ms.forEach(m => { const d = new Date(m.at), key = porMes ? d.getMonth() : ymd(m.at); tramos[key] = (tramos[key] || 0) + m.qty * m.price; });
+  const prods = {}; ms.forEach(m => { const x = (prods[m.pid] ||= { q:0, t:0 }); x.q += m.qty; x.t += m.qty * m.price; });
+  return { ms, ventas:grupos.size, total, gan, sinCosto:sinCosto.size, pago, porMes, tramos, top:Object.entries(prods).filter(([id]) => P(id)).sort((x, y) => y[1].t - x[1].t).slice(0, 10) };
+}
+function viewResumen(){
+  const k = ui.resPer || (ui.resPer = "hoy"), r = resumen(k);
+  const keys = r.porMes ? Object.keys(r.tramos).map(Number).sort((x, y) => x - y) : Object.keys(r.tramos).sort();
+  const max = Math.max(1, ...Object.values(r.tramos)), maxPago = Math.max(1, ...Object.values(r.pago));
+  const bar = (lbl, v, mx) => `<div class="barra"><span class="muted">${lbl}</span><i style="width:${Math.max(1, v / mx * 100)}%"></i><b>${clp(v)}</b></div>`;
+  return `${header("Resumen de ventas", PERIODOS[k])}
+  <div class="stack">
+    <div class="chips">${Object.entries(PERIODOS).map(([key, v]) => `<button class="chip" data-per="${key}" aria-pressed="${key === k}">${v}</button>`).join("")}</div>
+    <div class="kpis">
+      <div class="card kpi"><div class="num">${clp(r.total)}</div><div class="lbl">vendido · ${r.ventas} ${r.ventas === 1 ? "venta" : "ventas"}</div></div>
+      <div class="card kpi"><div class="num">${clp(r.gan)}</div><div class="lbl">ganancia estimada</div></div>
+      <div class="card kpi"><div class="num">${clp(r.ventas ? r.total / r.ventas : 0)}</div><div class="lbl">promedio por venta</div></div>
+      <div class="card kpi"><div class="num">${r.top.length ? esc(fq(P(r.top[0][0]), r.top[0][1].q)) : "—"}</div><div class="lbl">${r.top.length ? esc(P(r.top[0][0]).name) : "lo más vendido"}</div></div>
+    </div>
+    ${r.sinCosto ? `<p class="small muted" style="margin:0">La ganancia usa el costo actual de cada producto. ${r.sinCosto} ${r.sinCosto === 1 ? "producto vendido no tiene" : "productos vendidos no tienen"} costo y no ${r.sinCosto === 1 ? "entra" : "entran"} en la cuenta.</p>` : ""}
+    ${r.ms.length ? `
+    ${Object.keys(r.pago).some(x => x !== "sin") ? `<div class="card"><h3>Por medio de pago</h3>${Object.entries(r.pago).sort((x, y) => y[1] - x[1]).map(([x, v]) => bar(x === "sin" ? "Sin anotar" : PAGOS_CORTO[x], v, maxPago)).join("")}</div>` : ""}
+    ${keys.length > 1 ? `<div class="card"><h3>${r.porMes ? "Por mes" : "Por día"}</h3>${keys.map(x => bar(r.porMes ? MESES[x] : new Date(x + "T12:00").toLocaleDateString("es-CL", { weekday:"short", day:"numeric" }), r.tramos[x], max)).join("")}</div>` : ""}
+    <div class="card"><h3>Lo más vendido</h3><div class="list">${r.top.map(([id, x]) => `<div class="item"><div class="main"><div class="name">${esc(P(id).name)}</div><div class="sub">${fq(P(id), x.q)}${P(id).kg ? "" : x.q === 1 ? " vendido" : " vendidos"}</div></div><b>${clp(x.t)}</b></div>`).join("")}</div></div>
+    <button class="btn block" id="xlsx">Descargar en Excel</button>` : `<div class="card empty">No hay ventas en este período.</div>`}
+  </div>`;
+}
+function bindResumen(app){
+  app.querySelectorAll("[data-per]").forEach(b => b.onclick = () => { ui.resPer = b.dataset.per; rerender(); });
+  const x = $("#xlsx"); if (x) x.onclick = () => run(descargarExcel);
+}
+function descargarExcel(){
+  const k = ui.resPer, r = resumen(k), nombre = S.ajustes.tienda_nombre || "Mi Almacén";
+  const res = [[nombre + " · Resumen de ventas"], ["Período", PERIODOS[k]], ["Descargado", new Date().toLocaleString("es-CL")], [],
+    ["Total vendido", Math.round(r.total)], ["Ventas", r.ventas], ["Promedio por venta", Math.round(r.ventas ? r.total / r.ventas : 0)], ["Ganancia estimada", Math.round(r.gan)], [],
+    ["Medio de pago", "Total"], ...Object.entries(r.pago).map(([x, v]) => [x === "sin" ? "Sin anotar" : PAGOS[x], Math.round(v)]), [],
+    ["Producto", "Cantidad", "Total"], ...r.top.map(([id, x]) => [P(id).name, r3(x.q), Math.round(x.t)])];
+  const ventas = [["Fecha", "Hora", "Producto", "Sector", "Cantidad", "Precio", "Descuento", "Total", "Medio de pago", "Atendió"],
+    ...r.ms.slice().sort((a, b) => a.at - b.at).map(m => { const p = P(m.pid), d = new Date(m.at);
+      return [d.toLocaleDateString("es-CL"), d.toLocaleTimeString("es-CL", { hour:"2-digit", minute:"2-digit" }), p?.name || "", p?.cat || "", r3(m.qty), Math.round(m.lista ?? m.price), Math.round(m.desc || 0), Math.round(m.qty * m.price), m.pago ? PAGOS[m.pago] : "", nombrePersona(m.quien)]; })];
+  const blob = xlsx([{ name:"Resumen", rows:res }, { name:"Ventas", rows:ventas }]);
+  const url = URL.createObjectURL(blob), a = document.createElement("a");
+  a.href = url; a.download = `ventas-${PERIODOS[k].toLowerCase().replace(/\s+/g, "-").normalize("NFD").replace(/[̀-ͯ]/g, "")}-${hoy()}.xlsx`;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 5000); toast("Excel descargado");
+}
+// Archivo .xlsx armado a mano (un .zip sin comprimir con hojas en XML), sin librerías
+function xlsx(sheets){
+  const xe = v => String(v).replace(/[&<>"]/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c])).replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, "");
+  const col = i => { let s = ""; i++; while (i){ const m = (i - 1) % 26; s = String.fromCharCode(65 + m) + s; i = Math.floor((i - 1) / 26); } return s; };
+  const sheet = rows => `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${rows.map((r, i) => `<row r="${i + 1}">${r.map((v, j) => {
+    const ref = col(j) + (i + 1); if (v === "" || v == null) return ""; return typeof v === "number" && isFinite(v) ? `<c r="${ref}"><v>${v}</v></c>` : `<c r="${ref}" t="inlineStr"><is><t xml:space="preserve">${xe(v)}</t></is></c>`; }).join("")}</row>`).join("")}</sheetData></worksheet>`;
+  const files = [
+    ["[Content_Types].xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>${sheets.map((_, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join("")}</Types>`],
+    ["_rels/.rels", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`],
+    ["xl/workbook.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${sheets.map((s, i) => `<sheet name="${xe(s.name)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join("")}</sheets></workbook>`],
+    ["xl/_rels/workbook.xml.rels", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${sheets.map((_, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`).join("")}<Relationship Id="rId${sheets.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`],
+    ["xl/styles.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs></styleSheet>`],
+    ...sheets.map((s, i) => [`xl/worksheets/sheet${i + 1}.xml`, sheet(s.rows)])
+  ];
+  return zipStore(files);
+}
+// .zip sin compresión (método "store")
+function zipStore(files){
+  const enc = new TextEncoder(), crcT = zipStore.t || (zipStore.t = Array.from({ length:256 }, (_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; return c >>> 0; }));
+  const crc = b => { let c = 0xFFFFFFFF; for (const x of b) c = crcT[(c ^ x) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; };
+  const parts = [], central = []; let off = 0;
+  const u16 = n => [n & 255, (n >>> 8) & 255], u32 = n => [n & 255, (n >>> 8) & 255, (n >>> 16) & 255, (n >>> 24) & 255];
+  for (const [name, text] of files){
+    const nb = enc.encode(name), data = enc.encode(text), c = crc(data);
+    const head = [...u32(0x04034b50), ...u16(20), ...u16(0x0800), ...u16(0), ...u16(0), ...u16(0x21), ...u32(c), ...u32(data.length), ...u32(data.length), ...u16(nb.length), ...u16(0)];
+    parts.push(new Uint8Array(head), nb, data);
+    central.push(new Uint8Array([...u32(0x02014b50), ...u16(20), ...u16(20), ...u16(0x0800), ...u16(0), ...u16(0), ...u16(0x21), ...u32(c), ...u32(data.length), ...u32(data.length), ...u16(nb.length), ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(0), ...u32(off)]), nb);
+    off += head.length + nb.length + data.length;
+  }
+  const csize = central.reduce((t, x) => t + x.length, 0);
+  const end = new Uint8Array([...u32(0x06054b50), ...u16(0), ...u16(0), ...u16(files.length), ...u16(files.length), ...u32(csize), ...u32(off), ...u16(0)]);
+  return new Blob([...parts, ...central, end], { type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+}
+
+// ---------- Tutorial y ayuda ----------
+// Recorrido guiado: resalta una parte de la pantalla y explica para qué sirve. No guarda nada.
+const TOUR = [
+  { view:"inicio", sel:".kpis", txt:"Aquí ves cuánto llevas vendido hoy y, si cuentas el inventario, cuánto llevas contado." },
+  { view:"vender", sel:"#q", txt:"Para vender, busca el producto por su nombre. No importa si lo escribes sin tildes o con una letra mal." },
+  { view:"vender", sel:"#scan", txt:"También puedes escanear el código de barras con la cámara. Si tienes pistola de códigos, dispara en cualquier momento y el producto se suma solo." },
+  { view:"vender", sel:"#confirm", txt:"Cuando esté todo, confirma la venta. El stock se descuenta solo." },
+  { view:"contar", sel:"#app .sector", txt:"Cuenta un sector a la vez, cuando tengas tiempo. Desde ahí la app sabe cuánto queda de cada producto.", ext:"contar" },
+  { view:"productos", sel:"#addp", txt:"Aquí agregas productos y cambias precios. Lo que no vendas lo apagas, uno por uno o por sector." },
+  { view:"fiados", sel:"#addc", txt:"Anota lo que te quedan debiendo y recuérdalo por WhatsApp con un toque.", ext:"fiados" },
+  { view:"mas", sel:"#app .sector", txt:"En Más están el resto de las herramientas. Cada pantalla tiene un botón ? arriba que explica cómo usarla." }
+];
+function tour(i){
+  document.querySelectorAll(".tour-hole,.tour-card").forEach(x => x.remove());
+  const steps = TOUR.filter(t => !t.ext || ext(t.ext));
+  if (i >= steps.length){ go("inicio"); return; }
+  const t = steps[i];
+  if (ui.view !== t.view) go(t.view);
+  const el = document.querySelector(t.sel);
+  if (el) el.scrollIntoView({ block:"center" });
+  setTimeout(() => {
+    const r = el?.getBoundingClientRect(), hole = document.createElement("div"), card = document.createElement("div");
+    hole.className = "tour-hole";
+    if (r) Object.assign(hole.style, { left:r.left - 6 + "px", top:r.top - 6 + "px", width:r.width + 12 + "px", height:r.height + 12 + "px" });
+    else Object.assign(hole.style, { left:"50%", top:"40%", width:"0", height:"0" });
+    card.className = "tour-card";
+    card.innerHTML = `<div class="small muted" style="font-weight:600">Paso ${i + 1} de ${steps.length}</div><p style="margin:6px 0 12px">${esc(t.txt)}</p>
+      <div class="spread"><button class="btn sm ghost" data-tx>Salir</button><button class="btn sm primary" data-tn>${i + 1 < steps.length ? "Siguiente" : "Terminar"}</button></div>`;
+    const below = !r || r.bottom < innerHeight * 0.55;
+    card.style[below ? "top" : "bottom"] = below ? (r ? r.bottom + 18 : innerHeight * 0.45) + "px" : innerHeight - r.top + 18 + "px";
+    document.body.append(hole, card);
+    card.querySelector("[data-tx]").onclick = () => { hole.remove(); card.remove(); };
+    card.querySelector("[data-tn]").onclick = () => tour(i + 1);
+  }, 120);
+}
+// Lo que explica el botón ? de cada pantalla
+const AYUDA = {
+  vender:["Busca por nombre (aguanta errores y tildes), escanea con la cámara o dispara la pistola de códigos.", "Los botones de arriba suman con un toque lo que más se vende. Se activan en la ficha de cada producto.", "Si un producto no tiene precio, la app lo pregunta la primera vez y lo deja guardado.", "Los productos por kilo piden el peso de la balanza o un monto en pesos."],
+  contar:["Elige un sector y escribe lo que hay en la estantería. Lo vendido antes del conteo no se descuenta dos veces.", "Con muchas unidades usa Cajas ×: 4 cajas × 12 + 3 sueltas.", "Al escanear puedes sumar de a 1 o que te pregunte la cantidad.", "Marca No lo tenemos y el producto desaparece de las listas."],
+  productos:["Toca un producto para cambiar precio, costo, mínimo, código, unidades por caja o proveedor.", "El filtro Sin precio muestra lo que falta completar.", "Para dejar de vender algo, desmárcalo en su ficha. Para apagar un sector completo, elígelo arriba y toca Apagar sector.", "Con Sumar productos de un catálogo agregas los productos típicos de otro tipo de negocio."],
+  fiados:["Agrega al cliente, anota lo que se lleva fiado y registra sus pagos.", "Con un toque le mandas por WhatsApp un recordatorio con su saldo.", "Los fiados no cambian el stock: la venta se anota aparte en Vender."],
+  recibir:["Elige el proveedor (aparecen sus productos para tocarlos) y agrega lo que llegó.", "Marca Por caja para escribir cajas, unidades por caja y precio de la caja: la app calcula unidades y costo.", "El costo de cada producto se actualiza solo con lo que pagaste."],
+  compras:["Aparecen solos los productos que llegaron a su mínimo o menos, separados por proveedor.", "Cambia la cantidad a pedir o el mínimo ahí mismo.", "Pide por WhatsApp o copia la lista, y cuando llegue pásala a Recibir mercadería."],
+  proveedores:["Guarda celular, días de visita y lo que le debes a cada proveedor.", "Con Elegir productos le asignas varios de una vez y ves cuánto ganas con cada uno."],
+  vencimientos:["Anota la fecha al recibir o aquí abajo.", "Con Oferta le pones un descuento para venderlo antes; con Listo lo sacas de la lista."],
+  ofertas:["Pack: varios por un precio, mezclando los productos elegidos.", "Descuento: un % por días u horas.", "Se aplican solas en Vender, y avisa cuando falta poco para completar un pack."],
+  caja:["Muestra lo vendido desde el último cierre por medio de pago, más los pagos de fiados.", "Escribe el sencillo inicial y lo que cuentas en la caja: la app dice si cuadra, falta o sobra."],
+  resumen:["Elige el período para ver total, ventas, ganancia estimada y lo más vendido.", "La ganancia usa el costo actual de cada producto.", "Descarga todo en Excel con una hoja de resumen y otra con cada venta."],
+  encargos:["Anota pedidos para otro día con abono.", "Márcalo Listo y avísale al cliente por WhatsApp con un toque."],
+  personas:["Agrega a quienes atienden y elige quién está en este dispositivo.", "Cada venta, recepción y conteo queda con su nombre."],
+  historial:["Todo lo que entra, sale y se cuenta, del más nuevo al más viejo.", "Toca una venta para ver su comprobante (si está activado)."],
+  tipospan:["Elige para cada pan si se vende por unidad o por kilo, su precio, si tiene botón rápido y si se puede reservar."]
+};
+function openAyuda(v){
+  openModal(`<div class="stack">
+    <div class="spread"><h2>Cómo se usa</h2><button class="btn ghost sm" data-close>Cerrar</button></div>
+    <ul style="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:8px">${AYUDA[v].map(t => `<li>${esc(t)}</li>`).join("")}</ul>
+    <button class="btn block" id="ayutour">Ver el tutorial completo</button>
+  </div>`);
+  $("#ayutour").onclick = () => { closeModal(); tour(0); };
 }
 
 // ---------- Extensiones: cada tienda activa solo lo que usa ----------
@@ -1799,6 +2127,21 @@ async function restoreBackup(input){
   let data; try { data = JSON.parse(await f.text()); } catch(e){ throw new Error("No se pudo leer el archivo"); }
   if (data?.app !== "mi-almacen") throw new Error("El archivo no es un respaldo de esta app");
   const tienda = (data.tablas.meta || []).find(m => m.key === "tienda")?.value?.nombre || "la tienda";
+  if (MODE){
+    const otra = (data.tablas.meta || []).find(m => m.key === "tienda")?.value?.id !== meta.tienda?.id;
+    openModal(`<div class="stack"><h2>Restaurar el respaldo</h2>
+      <p style="margin:0">Respaldo de <b>${esc(tienda)}</b> del ${esc(new Date(data.creado).toLocaleString("es-CL"))}.</p>
+      ${otra ? `<p class="pill warn" style="white-space:normal;margin:0;padding:8px 10px">Este respaldo es de otra tienda. Si agregas sus datos, quedan mezclados con los de esta.</p>` : ""}
+      <button class="btn primary block" id="domerge">Agregar lo que falta</button>
+      <p class="small muted" style="margin:0">Suma los productos, ventas, fiados y demás que no estén aquí. No borra ni cambia nada de lo que ya tienes.</p>
+      <button class="btn block" id="doreplace">Reemplazar todo</button>
+      <p class="small muted" style="margin:0">Borra lo de este dispositivo y deja exactamente lo del respaldo.</p>
+    </div>`);
+    $("#domerge").onclick = () => run(async () => { const faltan = await LocalDB.missing(data); faltan.forEach(o => o.local = meta.demo);
+      await commit(faltan); closeModal(); await openStore(); toast(faltan.length ? `Se agregaron ${faltan.length} registros` : "No faltaba nada"); });
+    $("#doreplace").onclick = () => run(async () => { await LocalDB.importAll(data); closeModal(); await openStore(); toast("Respaldo restaurado"); });
+    return;
+  }
   openModal(`<div class="stack"><h2>¿Restaurar el respaldo?</h2>
     <p style="margin:0">Se reemplaza todo lo de este dispositivo por el respaldo de <b>${esc(tienda)}</b> del ${esc(new Date(data.creado).toLocaleString("es-CL"))}: ${(data.tablas.products || []).length} productos y ${(data.tablas.movs || []).length} movimientos.</p>
     <div class="grid2"><button class="btn" data-close>Cancelar</button><button class="btn primary" id="dorestore">Restaurar</button></div></div>`);
@@ -1827,6 +2170,7 @@ function viewMas(){
       ext("vencimientos") && opt("vencimientos","vencimientos","Vencimientos","Lo que vence pronto"),
       ext("ofertas") && opt("ofertas","ofertas","Ofertas y packs", `${S.ofertas.filter(o => ofertaVigente(o)).length} activas ahora`),
       ext("caja") && opt("caja","caja","Cierre de caja","Compara lo vendido con lo que hay en la caja"),
+      opt("resumen","resumen","Resumen de ventas","Hoy, semana, mes y año, ganancia y descarga en Excel"),
       opt("historial","historial","Historial","Todo lo que entra, sale y se cuenta")])}
     ${sec("Clientes y pan", [
       ext("encargos") && opt("encargos","encargos","Encargos", `${S.encargos.filter(e => e.estado !== "entregado").length} por entregar`),
@@ -1835,6 +2179,7 @@ function viewMas(){
       ext("pan") && opt("tipospan","pan","Tipos de pan", "Precios, por unidad o por kilo, botones rápidos y reservas")])}
     ${sec("Configuración", [
       ext("personas") && opt("personas","personas","Quién atiende", quien() ? "Ahora atiende " + esc(nombrePersona(quien())) : "Elige quién atiende en este dispositivo"),
+      `<button class="sector" id="tourbtn"><span class="name" style="display:flex;gap:10px;align-items:center"><span style="width:22px;height:22px;display:inline-flex" class="mi">${ICONS.ayuda}</span>Tutorial</span><span></span><span class="sub">Un recorrido corto por la app</span></button>`,
       opt("extensiones","extensiones","Extensiones", "Activa solo las funciones que usa tu negocio"),
       opt("apariencia","apariencia","Apariencia", "Colores, estilo y tipo de letra"),
       opt("datos","datos","Tienda y datos", `${meta.pending} cambios guardados en este dispositivo · respaldo e instalación`)])}
@@ -1857,11 +2202,15 @@ function render(){
   const v = ui.view, app = $("#app");
   app.innerHTML = ({ inicio:viewInicio, vender:viewVender, recibir:viewRecibir, contar:viewContar, productos:viewProductos, historial:viewHistorial, fiados:viewFiados, mas:viewMas,
     reservas:viewReservas, datos:viewDatos, extensiones:viewExtensiones, apariencia:viewApariencia, compras:viewCompras, vencimientos:viewVencimientos,
-    proveedores:viewProveedores, caja:viewCaja, tipospan:viewTiposPan, ofertas:viewOfertas, personas:viewPersonas, encargos:viewEncargos })[v]();
-  ({ tipospan:bindTiposPan, compras:bindCompras, vencimientos:bindVencimientos, proveedores:bindProveedores, caja:bindCaja, ofertas:bindOfertas, personas:bindPersonas, encargos:bindEncargos })[v]?.(app);
+    proveedores:viewProveedores, caja:viewCaja, tipospan:viewTiposPan, resumen:viewResumen, ofertas:viewOfertas, personas:viewPersonas, encargos:viewEncargos })[v]();
+  ({ resumen:bindResumen, tipospan:bindTiposPan, compras:bindCompras, vencimientos:bindVencimientos, proveedores:bindProveedores, caja:bindCaja, ofertas:bindOfertas, personas:bindPersonas, encargos:bindEncargos })[v]?.(app);
   app.querySelectorAll("[data-go]").forEach(b => b.onclick = () => go(b.dataset.go));
   app.querySelectorAll("[data-back]").forEach(b => b.onclick = back);
   const pb = $("#panbtn"); if (pb) pb.onclick = openPan;
+  const tb = $("#tourbtn"); if (tb) tb.onclick = () => tour(0);
+  const tc = $("#tourno"); if (tc) tc.onclick = () => run(async () => { await setPref({ tourVisto:true }); rerender(); });
+  const ts = $("#toursi"); if (ts) ts.onclick = () => { setPref({ tourVisto:true }); tour(0); };
+  app.querySelectorAll("[data-ayuda]").forEach(b => b.onclick = () => openAyuda(ui.view));
   if (v === "fiados"){
     $("#addc").onclick = openNewClient;
     app.querySelectorAll("[data-client]").forEach(b => b.onclick = () => openCliente(S.clients.find(c => c.id === b.dataset.client)));
@@ -1942,6 +2291,12 @@ function render(){
     app.querySelectorAll("[data-rv]").forEach(i => i.oninput = () => { ui.recv.items[i.dataset.rv].vence = i.value; });
     const rd = $("#rdebe"); if (rd) rd.onchange = () => ui.recv.debe = rd.checked;
     app.querySelectorAll("[data-sup]").forEach(b => b.onclick = () => { ui.recv.supplier = b.dataset.sup; rerender(); });
+    app.querySelectorAll("[data-rpq]").forEach(b => b.onclick = () => { const y = window.scrollY; addToRecv(P(b.dataset.rpq)); window.scrollTo(0, y); });
+    app.querySelectorAll("[data-rcaja]").forEach(i => i.onchange = () => { const l = ui.recv.items[i.dataset.rcaja], p = P(l.pid);
+      l.caja = i.checked ? { n:"", por:p.porCaja || "", precio:"" } : null; rerender(); });
+    const caja = (attr, k) => app.querySelectorAll(`[data-${attr}]`).forEach(i => i.onchange = () => { const l = ui.recv.items[i.dataset[attr]]; l.caja[k] = Math.round(+i.value || 0);
+      const { n, por, precio } = l.caja; if (n && por){ l.qty = n * por; if (precio) l.cost = Math.round(precio / por); } rerender(); });
+    caja("rcn", "n"); caja("rcu", "por"); caja("rcp", "precio");
     app.querySelectorAll("[data-rc]").forEach(i => i.oninput = () => { ui.recv.items[i.dataset.rc].cost = Math.max(0, +i.value||0); });
     app.querySelectorAll("[data-rq],[data-rc]").forEach(i => i.onchange = render);
     $("#confirm").onclick = () => run(async () => { const n = ui.recv.items.reduce((a,l) => a + (l.qty||0), 0);
@@ -1956,9 +2311,9 @@ function render(){
       app.querySelectorAll("[data-cq]").forEach(i => i.oninput = () => { (ui.draft[i.dataset.cq] ||= {}).qty = i.value; });
       app.querySelectorAll("[data-ce]").forEach(i => i.onchange = () => { (ui.draft[i.dataset.ce] ||= {}).est = i.checked; });
       app.querySelectorAll("[data-cn]").forEach(b => b.onclick = () => { const p = P(b.dataset.cn); const d = (ui.draft[p.id] ||= {}); const off = d.none ?? !p.has; d.none = !off; render(); });
-      $("#scan").onclick = () => openScanSheet(p => {
-        if (p.cat !== ui.sector) toast(`${p.name} es del sector ${p.cat}; se suma igual`); else toast(`+1 ${p.name}`);
-        const d = (ui.draft[p.id] ||= {}); d.qty = String((parseInt(d.qty,10)||0) + 1); d.none = false; render(); });
+      $("#scan").onclick = () => openScanSheet(scanCount);
+      app.querySelectorAll("[data-sask]").forEach(b => b.onclick = () => run(async () => { await setPref({ scanAsk:b.dataset.sask === "1" }); rerender(); }));
+      app.querySelectorAll("[data-cbox]").forEach(b => b.onclick = () => openCantidad(P(b.dataset.cbox)));
       $("#addp").onclick = () => openProductForm(ui.sector, "", () => render());
       $("#finish").onclick = finishCount;
     }
@@ -1967,7 +2322,10 @@ function render(){
     $("#pq").oninput = e => { ui.prodQuery = e.target.value; const pos = e.target.selectionStart; render(); const n = $("#pq"); n.focus(); n.setSelectionRange(pos,pos); };
     app.querySelectorAll("[data-f]").forEach(b => b.onclick = () => { ui.prodFilter = b.dataset.f; render(); });
     app.querySelectorAll("[data-open]").forEach(b => b.onclick = () => openProduct(P(b.dataset.open)));
-    $("#addp").onclick = () => openProductForm(ui.prodFilter==="Todos" ? null : ui.prodFilter, "", null);
+    const so = $("#secoff"); if (so) so.onclick = () => run(async () => { const c = ui.prodFilter, off = S.ajustes.sectores_off || [];
+      await act.setting("sectores_off", sectorOff(c) ? off.filter(x => x !== c) : [...off, c]); rerender(); toast(`${c}: ${sectorOff(c) ? "apagado" : "prendido"}`); });
+    $("#addcat").onclick = openSumarCatalogo;
+    $("#addp").onclick = () => openProductForm(sectores().includes(ui.prodFilter) ? ui.prodFilter : null, "", null);
   }
   if (v === "historial"){
     app.querySelectorAll("[data-hf]").forEach(b => b.onclick = () => { ui.histFilter = b.dataset.hf; render(); });
@@ -2005,19 +2363,23 @@ Sync.state.onChange = async () => { await loadLocal(); if (MODE) softRender(); }
 function showSetup(){
   if (invite) return showJoin(invite.servidor, invite.tienda);
   S = null; applyTheme();
-  const st = { inicio:"catalogo" };
+  const st = { inicio:"catalogo", tipo:"almacen" };
+  const iniTxt = () => { const n = NEGOCIOS[st.tipo], c = cuantosCatalogo(st.tipo);
+    return `Productos típicos de ${n.nombre.toLowerCase()}<small>${c.n} productos en ${c.sec} sectores. Los que no vendas los apagas uno por uno o por sector. Los precios se completan después o la primera vez que vendes cada uno.</small>`; };
   gate(`${gateHead()}<div class="stack">
     <div class="card stack"><h2>Crea tu tienda</h2>
       <p class="small muted" style="margin:0">Todo queda guardado en este dispositivo y funciona sin internet. No necesitas crear una cuenta.</p>
       <div class="field"><label for="sn">Nombre de la tienda</label><input class="input" id="sn" placeholder="Ej: Almacén Don José" autocomplete="organization"></div>
       <div class="field"><label for="sp">Tu nombre</label><input class="input" id="sp" placeholder="Ej: Rosa" autocomplete="given-name"></div>
+      <div class="field"><label>¿Qué tipo de negocio es?</label>
+        <div class="grid2" style="gap:8px">${Object.entries(NEGOCIOS).map(([k, n]) => `<button class="choice" data-tipo="${k}" aria-pressed="${k === st.tipo}">${esc(n.nombre)}<small>${esc(n.desc)}</small></button>`).join("")}</div></div>
       <div class="field"><label>¿Con qué productos empiezas?</label>
         <div class="stack" style="gap:8px">
-          <button class="choice" data-ini="catalogo" aria-pressed="true">Productos típicos de almacén<small>${CATALOG.length} productos en ${SECTORS.length} sectores (pan, verduras, bebidas, lácteos, abarrotes…). Los precios son de referencia: después los ajustas y cuentas lo que tienes.</small></button>
+          <button class="choice" data-ini="catalogo" aria-pressed="true" id="inicat">${iniTxt()}</button>
           <button class="choice" data-ini="vacio" aria-pressed="false">Empezar vacío<small>Agregas tus productos uno por uno o escaneando el código de barras.</small></button>
         </div></div>
       <div class="field"><label>¿Qué vas a usar?</label>
-        <div style="padding:0 2px">${extSwitches("data-sext", e => e.def)}</div>
+        <div style="padding:0 2px" id="sextbox">${extSwitches("data-sext", e => NEGOCIOS[st.tipo].ext.includes(e.id))}</div>
         <p class="small muted" style="margin:0">Lo puedes cambiar cuando quieras en Más &gt; Extensiones.</p></div>
       <button class="btn primary block" id="screate">Crear tienda</button>
     </div>
@@ -2025,14 +2387,21 @@ function showSetup(){
     <button class="btn block" id="sdemo">Solo quiero probar con datos de ejemplo</button>
     <label class="btn ghost block filebtn">Tengo un respaldo: restaurarlo<input type="file" id="srestore" accept="application/json,.json"></label>
   </div>`);
-  document.querySelectorAll("[data-ini]").forEach(b => b.onclick = () => { st.inicio = b.dataset.ini; document.querySelectorAll("[data-ini]").forEach(x => x.setAttribute("aria-pressed", x === b)); });
+  document.querySelectorAll("[data-ini]").forEach(b => b.onclick = () => { st.inicio = b.dataset.ini; st.auto = false; document.querySelectorAll("[data-ini]").forEach(x => x.setAttribute("aria-pressed", x === b)); });
+  document.querySelectorAll("[data-tipo]").forEach(b => b.onclick = () => { st.tipo = b.dataset.tipo; document.querySelectorAll("[data-tipo]").forEach(x => x.setAttribute("aria-pressed", x === b));
+    $("#inicat").innerHTML = iniTxt(); $("#inicat").hidden = st.tipo === "otro";
+    // "Otro negocio" no trae catálogo; al volver a un tipo con catálogo, se vuelve a ofrecer
+    const ini = st.tipo === "otro" ? "vacio" : st.auto ? "catalogo" : st.inicio;
+    if (st.tipo === "otro"){ if (st.inicio !== "vacio") st.auto = true; } else st.auto = false;
+    if (ini !== st.inicio){ st.inicio = ini; document.querySelectorAll("[data-ini]").forEach(x => x.setAttribute("aria-pressed", x.dataset.ini === ini)); }
+    $("#sextbox").innerHTML = extSwitches("data-sext", e => NEGOCIOS[st.tipo].ext.includes(e.id)); });
   $("#screate").onclick = () => run(async () => {
     const nombre = $("#sn").value.trim(), persona = $("#sp").value.trim();
     if (!nombre){ $("#sn").focus(); return toast("Escribe el nombre de la tienda"); }
     $("#screate").disabled = true; $("#screate").textContent = "Creando…";
     meta.servidor = await localServer();
     const exts = Object.fromEntries([...document.querySelectorAll("[data-sext]")].map(i => [i.dataset.sext, i.checked]));
-    await createStore(nombre, persona, st.inicio, exts).finally(() => { const b = $("#screate"); if (b){ b.disabled = false; b.textContent = "Crear tienda"; } });
+    await createStore(nombre, persona, st.inicio, exts, st.tipo).finally(() => { const b = $("#screate"); if (b){ b.disabled = false; b.textContent = "Crear tienda"; } });
     ui.view = "inicio"; await openStore(); toast(`${nombre} está lista`);
   });
   $("#sdemo").onclick = () => run(async () => { meta.servidor = ""; await createStore("Almacén de ejemplo", "", "ejemplo"); ui.view = "inicio"; await openStore(); });
@@ -2059,6 +2428,33 @@ function showJoin(servidor, tienda){
     try { await joinStore(url, code); } catch(e){ await LocalDB.wipe().catch(() => {}); Sync.stop(); throw e; } finally { b.disabled = false; b.textContent = "Unirme y descargar los datos"; }
     clearInvite(); ui.view = "inicio"; await openStore(); toast(`Listo: ${S.ajustes.tienda_nombre || "la tienda"} está en este dispositivo`);
   });
+}
+
+// ---------- Pistola de códigos ----------
+// La pistola "escribe" el código muy rápido y termina con Enter. Si las teclas llegan con menos de
+// 50 ms entre una y otra, se toma como un código escaneado, sin importar dónde esté el cursor.
+const pist = { buf:"", t:0 };
+document.addEventListener("keydown", e => {
+  if (!MODE) return;
+  const now = Date.now(), gap = now - pist.t;
+  if (e.key === "Enter"){
+    const code = pist.buf; pist.buf = "";
+    if (code.length >= 6 && gap < 100 && !document.querySelector(".overlay")){
+      e.preventDefault();
+      const a = document.activeElement; if (a && /^(INPUT|TEXTAREA)$/.test(a.tagName) && a.value.endsWith(code)){ a.value = a.value.slice(0, -code.length); a.dispatchEvent(new Event("input")); }
+      pistola(code);
+    }
+    return;
+  }
+  if (e.key.length !== 1 || e.ctrlKey || e.metaKey || e.altKey) return;
+  pist.buf = gap < 50 ? pist.buf + e.key : e.key; pist.t = now;
+}, true);
+function pistola(code){
+  const v = ui.view;
+  const cb = v === "recibir" ? addToRecv : v === "contar" && ui.sector ? scanCount : v === "productos" ? openProduct
+    : v === "vencimientos" ? (p => { ui.venc.pid = p.id; rerender(); })
+    : p => { if (ui.view !== "vender") go("vender"); addToCart(p); if (p.price > 0 && !p.kg) toast(`+1 ${p.name}`); };
+  handleCode(code, cb);
 }
 
 // Indicador de conexión: la app no la necesita, pero así se ve que todo se guarda igual

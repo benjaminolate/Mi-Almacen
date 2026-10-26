@@ -7,9 +7,9 @@
 //
 // Al cambiar cualquier archivo de la app, sube VERSION para que todos los
 // dispositivos descarguen la copia nueva.
-const VERSION = "v4";
+const VERSION = "v5";
 const APP = "app-" + VERSION, EXT = "externos-v1";
-const FILES = ["./", "local-db.js", "sync.js", "manifest.webmanifest", "icons/icon.svg", "icons/icon-192.png", "icons/icon-512.png", "icons/icon-maskable-512.png"];
+const FILES = ["./", "local-db.js", "catalogos.js", "sync.js", "manifest.webmanifest", "icons/icon.svg", "icons/icon-192.png", "icons/icon-512.png", "icons/icon-maskable-512.png"];
 
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(APP).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));

@@ -8,14 +8,18 @@ Parte del código de [Inventario_almacen_VD](https://github.com/benjaminolate/In
 
 ## Qué hace
 
-- **Vender, recibir mercadería y contar por sectores**, con escaneo de códigos de barras con la cámara.
+- **Tipo de negocio al crear la tienda:** almacén, minimarket, panadería, carnicería, verdulería, botillería u otro. Cada uno trae sus productos típicos sin precio (el almacén suma unos 390, incluidos 357 de un almacén real) y las extensiones que más le sirven. Lo que no se venda se apaga por producto o por sector completo, y se pueden sumar después los productos de otro tipo de negocio.
+- **Vender, recibir mercadería y contar por sectores**, con escaneo de códigos de barras con la cámara o con **pistola USB o Bluetooth**. La búsqueda aguanta tildes, guiones y una letra mal escrita. Si un producto no tiene precio, se pregunta la primera vez que se vende.
+- **Cajas:** contar como "4 cajas × 12 + 3 sueltas", recibir por caja (la app calcula unidades y costo unitario) y unidades por caja en cada producto.
 - **Stock calculado por producto:** `último conteo + compras − ventas desde ese conteo`. Se puede contar un sector por día sin cerrar el negocio.
 - **Fiados** por cliente con recordatorio por WhatsApp, **aviso de que llegó el pan** y **reservas** anotadas por la tienda.
 - **Funciona sin internet:** la app queda guardada en el dispositivo (service worker) y los datos en su base local (IndexedDB).
 - **Instalable** como app (PWA), sin pasar por Play Store.
-- **Respaldo** en un archivo y restauración desde él.
+- **Respaldo** en un archivo y restauración desde él, reemplazando todo o **agregando solo lo que falta**. El servidor además guarda una copia automática cada día.
+- **Resumen de ventas** de hoy, 7 días, este mes, mes pasado, este año y año pasado, con descarga a **Excel**.
+- **Tutorial** la primera vez y un botón **?** en cada pantalla que explica cómo usarla.
 - **Extensiones:** cada tienda activa solo lo que usa, en Más > Extensiones. Al quitar una, sus datos no se borran.
-  - Inventario: conteo por sectores, recibir mercadería, **stock bajo y lista de compras** (pedido por WhatsApp a cada proveedor), **vencimientos**, **proveedores** (días de visita y deuda) y **venta a granel** (por kilo o gramos).
+  - Inventario: conteo por sectores, recibir mercadería, **stock bajo y lista de compras** (pedido por WhatsApp a cada proveedor), **vencimientos**, **proveedores** (días de visita, deuda, productos asignados en lote y ganancia por producto) y **venta a granel** (por kilo o gramos).
   - Ventas: **cierre de caja** (efectivo, tarjeta y transferencia, con vuelto), **ofertas y packs** ("3 por $1.000" o % por día y horario), **comprobante** por WhatsApp o impreso (sin valor tributario) y **quién atiende**.
   - Clientes y pan: fiados, pan (aviso, reservas y **tipos de pan**, cada uno por unidad o por kilo) y **encargos** para otro día con abono.
 - **Botones rápidos** en Vender para el pan o cualquier producto, y catálogo inicial con pan y verduras a granel.
@@ -60,9 +64,10 @@ Cómo prenderlo: [servidor/INSTRUCCIONES.md](servidor/INSTRUCCIONES.md).
 | Archivo | Qué es |
 |---|---|
 | `index.html` | Toda la app: estilos, pantallas y acciones |
+| `catalogos.js` | Productos típicos de cada tipo de negocio (sin precios) |
 | `local-db.js` | Base local (IndexedDB), bandeja de salida, reloj lógico y respaldos |
 | `sync.js` | Envía y recibe cambios con el servidor, y escucha los avisos en tiempo real |
-| `servidor/pb_migrations/` | Crea la tabla `cambios` en PocketBase |
+| `servidor/pb_migrations/` | Crea la tabla `cambios` en PocketBase y activa el respaldo diario |
 | `servidor/pb_hooks/sync.pb.js` | El punto de sincronización `/api/sync` |
 | `servidor/iniciar.bat`, `iniciar.sh` | Prenden el servidor con un doble clic |
 | `sw.js` | Guarda la app en el dispositivo para que abra sin internet |
