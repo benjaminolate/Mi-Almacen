@@ -21,18 +21,20 @@ function avisar(tienda) {
   }
 }
 
-// Guarda un registro como si lo hubiera mandado un dispositivo más (el "dispositivo" web)
-function guardarCambio(tienda, store, value) {
+// Guarda un registro como si lo hubiera mandado un dispositivo más (el "dispositivo" web).
+// Con del, guarda un borrado. desdeMs: el sello queda después de esa hora (para ganarle a otro cambio).
+function guardarCambio(tienda, store, value, del, desdeMs) {
   const alfabeto = "0123456789abcdefghijklmnopqrstuvwxyz";
   for (let intento = 0; intento < 3; intento++) {
     try {
       $app.runInTransaction((tx) => {
         const r = new Record(tx.findCollectionByNameOrId("cambios"));
         r.set("tienda", tienda);
-        r.set("hlc", Date.now() + "-0000-web" + $security.randomStringWithAlphabet(8, alfabeto));
+        r.set("hlc", Math.max(Date.now(), (desdeMs || 0) + 1) + "-0000-web" + $security.randomStringWithAlphabet(8, alfabeto));
         r.set("device", "web");
         r.set("store", store);
-        r.set("value", value);
+        if (del != null) r.set("del", String(del));
+        else r.set("value", value);
         r.set("seq", maxSeq(tx.db(), tienda) + 1);
         tx.save(r);
       });
@@ -73,4 +75,65 @@ function limite(llave, max, ms) {
   return true;
 }
 
-module.exports = { UUID, PID, maxSeq, avisar, guardarCambio, desdeInternet, ipCliente, limite };
+// ---------- Cuentas y permisos (Fase 4) ----------
+// Permisos: precios (productos, precios y ofertas), costos (ver costos y proveedores), inventario
+// (contar, recibir y vencimientos), reportes (resumen e historial), config (ajustes de la tienda)
+// y cuentas (crear usuarios; solo el dueño). Vender, fiados, reservas, encargos y caja: todos.
+const PERMISOS = ["precios", "costos", "inventario", "reportes", "config"];
+function permisosDe(rol, extra) {
+  const p = { cuentas: rol === "dueno" };
+  for (const k of PERMISOS) p[k] = rol === "dueno" || (rol === "encargado") || !!(extra && extra[k]);
+  return p;
+}
+const tieneMiembros = (tienda) => $app.countRecords("miembros", $dbx.hashExp({ tienda: tienda })) > 0;
+// La membresía activa de quien hace el pedido en esa tienda, o null
+function miembroDe(e, tienda) {
+  const u = e.auth;
+  if (!u || u.collection().name !== "usuarios") return null;
+  try {
+    const m = $app.findFirstRecordByFilter("miembros", "usuario = {:u} && tienda = {:t} && activo = true", { u: u.id, t: tienda });
+    return m;
+  } catch (err) { return null; }
+}
+function permisosMiembro(m) { return permisosDe(m.getString("rol"), JSON.parse(m.getString("permisos") || "{}")); }
+
+// Último valor que tiene el servidor de un registro: { value, hlc }, { del: true, hlc } o null
+function ultimo(tienda, store, key) {
+  const campo = store === "ajustes" ? "value.clave" : "value.id";
+  const rows = $app.findRecordsByFilter("cambios", "tienda = {:t} && store = {:s} && (" + campo + " = {:k} || del = {:k})", "-seq", 1, 0, { t: tienda, s: store, k: key });
+  if (!rows.length) return null;
+  const hlc = rows[0].getString("hlc");
+  if (rows[0].getString("del")) return { del: true, hlc: hlc };
+  return { value: JSON.parse(rows[0].getString("value") || "{}"), hlc: hlc };
+}
+
+// ¿Puede alguien con permisos P guardar este cambio? prev: lo que había (de ultimo())
+const INVENTARIO_PRODUCTO = ["countQty", "countAt", "estimated", "has", "cost", "porCaja", "prov", "_v"];
+function permite(P, store, value, del, prev) {
+  const borra = del != null;
+  switch (store) {
+    case "movs":
+      if (borra) return P.config;
+      return value.type === "venta" || P.inventario;
+    case "products": {
+      if (borra || !prev || !prev.value) return P.precios;
+      if (P.precios) return true;
+      const antes = prev.value, cambios = [];
+      const claves = {};
+      for (const k in antes) claves[k] = 1;
+      for (const k in value) claves[k] = 1;
+      for (const k in claves) if (JSON.stringify(antes[k]) !== JSON.stringify(value[k])) cambios.push(k);
+      return P.inventario && cambios.every((k) => INVENTARIO_PRODUCTO.indexOf(k) >= 0);
+    }
+    case "ajustes": return (value && value.clave === "mensaje_pan") || P.config;
+    case "vencimientos": return P.inventario;
+    case "proveedores": case "provmovs": return P.inventario || P.costos;
+    case "ofertas": return P.precios;
+    case "personas": return P.config || P.cuentas;
+    case "reservas": return true;
+    default: return borra ? P.config : true;   // clients, fiados, cajas, encargos
+  }
+}
+
+module.exports = { UUID, PID, maxSeq, avisar, guardarCambio, desdeInternet, ipCliente, limite,
+  PERMISOS, permisosDe, tieneMiembros, miembroDe, permisosMiembro, ultimo, permite };

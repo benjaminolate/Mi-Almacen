@@ -383,7 +383,7 @@ const ops = (store, list) => list.map(value => ({ store, value }));
 
 async function loadLocal(){
   const t = await LocalDB.loadAll();
-  meta.tienda = t.meta.tienda || null; meta.device = t.meta.device || null; meta.demo = !!t.meta.demo; meta.pending = t.pending; meta.servidor = t.meta.servidor || ""; meta.prefs = t.meta.prefs || null;
+  meta.tienda = t.meta.tienda || null; meta.device = t.meta.device || null; meta.demo = !!t.meta.demo; meta.pending = t.pending; meta.servidor = t.meta.servidor || ""; meta.prefs = t.meta.prefs || null; meta.cuenta = t.meta.cuenta || null;
   if (meta.device) LocalDB.clock.device = meta.device.id;
   const aj = Object.fromEntries(t.ajustes.map(a => [a.clave, a.valor]));
   const clients = t.clients.map(c => ({ id:c.id, name:c.name, phone:c.phone || "", items:[] })), byId = Object.fromEntries(clients.map(c => [c.id, c]));
@@ -428,7 +428,7 @@ async function createStore(nombre, persona, inicio, extensiones, tipo){
 const newDevice = () => ({ id: uid().replace(/-/g, "").slice(0, 8), nombre: /Android|iPhone|iPad/i.test(navigator.userAgent) ? "Celular" : "Computador", creado: Date.now() });
 
 // Une este dispositivo a una tienda que ya existe en el servidor y descarga todos sus datos
-async function joinStore(servidor, tiendaId){
+async function joinStore(servidor, tiendaId, cuenta){
   if (!(await Sync.probe(servidor))) throw new Error("No se encontró el servidor en " + servidor);
   const device = newDevice();
   await LocalDB.wipe();
@@ -436,8 +436,11 @@ async function joinStore(servidor, tiendaId){
   await LocalDB.setMeta("device", device);
   await LocalDB.setMeta("servidor", servidor);
   await LocalDB.setMeta("demo", false);
+  if (cuenta) await LocalDB.setMeta("cuenta", cuenta);
+  Sync.state.token = cuenta?.token || "";
   Sync.start(servidor, tiendaId);
   await Sync.syncNow();
+  if (Sync.state.status === "cuenta") throw Object.assign(new Error(Sync.state.error), { code:"cuenta" });
   if (Sync.state.status === "error") throw new Error(Sync.state.error);
   await loadLocal();
   if (!S.ajustes.tienda_nombre && !S.products.length) throw new Error("El servidor no tiene datos de esa tienda. Revisa el código.");
@@ -695,6 +698,8 @@ function openAssociate(code, cb){
 
 // Producto sin precio: se pregunta la primera vez que se vende y queda guardado
 function openPrecio(p, then){
+  if (!puede("precios")) return openModal(`<div class="stack"><div class="spread"><h2>${esc(p.name)}</h2><button class="btn ghost sm" data-close>Cerrar</button></div>
+    <p style="margin:0">Este producto todavía no tiene precio y tu usuario no puede ponérselo. Pídele a quien administra la tienda que lo agregue.</p><button class="btn block" data-close>Entendido</button></div>`);
   openModal(`<div class="stack">
     <div class="spread"><h2>${esc(p.name)}</h2><button class="btn ghost sm" data-close>Cerrar</button></div>
     <p style="margin:0">Este producto todavía no tiene precio. ¿A cuánto lo vendes${p.kg ? " el kilo" : ""}?</p>
@@ -754,12 +759,15 @@ const ICONS = {
   pagina:'<svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM21 14v.01M14 21h.01M17.5 21H21v-3.5"/></svg>'
 };
 const LABELS = { inicio:"Inicio", vender:"Vender", contar:"Contar", productos:"Productos", fiados:"Fiados", mas:"Más" };
-const IN_MAS = ["mas","recibir","historial","resumen","reservas","tipospan","datos","extensiones","apariencia","compras","vencimientos","proveedores","caja","ofertas","personas","encargos","pagina"];
+const IN_MAS = ["mas","recibir","historial","resumen","reservas","tipospan","datos","extensiones","apariencia","compras","vencimientos","proveedores","caja","ofertas","personas","encargos","pagina","cuentas"];
 // Pantallas que dependen de una extensión
+// Pantallas que necesitan un permiso cuando la tienda usa cuentas
+const VIEW_PERM = { contar:"inventario", recibir:"inventario", compras:"inventario", vencimientos:"inventario", proveedores:"costos", ofertas:"precios",
+  resumen:"reportes", historial:"reportes", extensiones:"config", apariencia:"config", pagina:"config", tipospan:"precios", personas:"config" };
 const VIEW_EXT = { contar:"contar", fiados:"fiados", recibir:"recibir", reservas:["pan","pagina"], tipospan:"pan", pagina:"pagina", compras:"compras", vencimientos:"vencimientos", proveedores:"proveedores",
   caja:"caja", ofertas:"ofertas", personas:"personas", encargos:"encargos" };
 function renderTabs(){
-  const tabs = Object.keys(LABELS).filter(k => !VIEW_EXT[k] || ext(VIEW_EXT[k]));
+  const tabs = Object.keys(LABELS).filter(k => (!VIEW_EXT[k] || ext(VIEW_EXT[k])) && (!VIEW_PERM[k] || puede(VIEW_PERM[k])));
   $("#tabs").style.setProperty("--tabs", tabs.length);
   $("#tabs").innerHTML = tabs.map(k => `<button data-view="${k}" ${ui.view===k || (k==="mas" && IN_MAS.includes(ui.view))?'aria-current="page"':''}>${ICONS[k]}<span>${LABELS[k]}</span></button>`).join("");
   document.querySelectorAll("#tabs [data-view]").forEach(b => b.onclick = () => go(b.dataset.view));
@@ -777,7 +785,7 @@ window.addEventListener("popstate", e => {
 function header(title, sub){ return `${IN_MAS.includes(ui.view) && ui.view !== "mas" ? backBtn() : ""}<header class="top"><h1 class="brandname">${esc(title)}<small>${esc(sub)}</small></h1><div class="hdr-r">${AYUDA[ui.view] ? `<button class="btn sm ghost" data-ayuda aria-label="Cómo se usa esta pantalla" title="Cómo se usa">?</button>` : ""}${whoChip()}${netPill()}</div></header>`; }
 // Botón con el nombre de quien atiende (extensión "Quién atiende")
 const backBtn = () => `<div style="padding-top:12px"><button class="btn sm" data-back>← Regresar</button></div>`;
-const whoChip = () => ext("personas") && personasActivas().length ? `<button class="chip" data-go="personas" title="Cambiar quién atiende">${esc(nombrePersona(quien()) || "¿Quién atiende?")}</button>` : "";
+const whoChip = () => cuentasOn() && meta.cuenta ? `<button class="chip" data-go="cuentas" title="Tu cuenta">${esc(meta.cuenta.usuario.nombre)}</button>` : ext("personas") && personasActivas().length ? `<button class="chip" data-go="personas" title="Cambiar quién atiende">${esc(nombrePersona(quien()) || "¿Quién atiende?")}</button>` : "";
 function netPill(){
   const st = Sync.state.status, pend = meta.pending;
   if (st === "ok" || (st === "syncing" && !pend)) return `<span class="net" title="Todo está guardado aquí y en el servidor"><i></i>Sincronizado</span>`;
@@ -946,7 +954,7 @@ function viewContar(){
   return `<header class="top"><button class="btn sm" id="back">← Sectores</button><span class="small muted">${ps.filter(p=>p.has).length} productos</span></header>
   <div class="stack">
     <div><h2>Contando: ${esc(ui.sector)}</h2><p class="small muted" style="margin:4px 0 0">Escribe lo que hay en la estantería. Cada escaneo suma 1. Lo que no tengan, márcalo y desaparece de las listas.</p></div>
-    <div class="row"><button class="btn accent" id="scan">Escanear</button><button class="btn" id="addp">+ Agregar producto</button></div>
+    <div class="row"><button class="btn accent" id="scan">Escanear</button><button class="btn" id="addp" data-perm="precios">+ Agregar producto</button></div>
     <div class="field"><label>Al escanear</label><div class="seg" role="group"><button data-sask="0" aria-pressed="${!prefs().scanAsk}">Suma 1 cada vez</button><button data-sask="1" aria-pressed="${!!prefs().scanAsk}">Preguntar cantidad</button></div></div>
     <div class="card" style="padding-block:4px">
       ${ps.map(p => { const d = ui.draft[p.id] || {}; const off = d.none ?? !p.has; const prev = stockOf(p);
@@ -1007,13 +1015,13 @@ function viewProductos(){
   const sec = secs.includes(ui.prodFilter) ? ui.prodFilter : null;
   return `${header("Productos", `${S.products.filter(disp).length} productos a la venta`)}
   <div class="stack">
-    <div class="searchbar"><input class="input" id="pq" placeholder="Buscar" value="${esc(ui.prodQuery)}"><button class="btn primary" id="addp">+ Agregar</button></div>
+    <div class="searchbar"><input class="input" id="pq" placeholder="Buscar" value="${esc(ui.prodQuery)}"><button class="btn primary" id="addp" data-perm="precios">+ Agregar</button></div>
     <div class="chips">${["Todos", ...(sinPrecio ? ["Sin precio"] : []), ...(apagados ? ["Apagados"] : []), ...secs].map(c => `<button class="chip" data-f="${esc(c)}" aria-pressed="${ui.prodFilter===c}" ${sectorOff(c) ? 'style="text-decoration:line-through"' : ""}>${esc(c)}${c === "Sin precio" ? ` (${sinPrecio})` : c === "Apagados" ? ` (${apagados})` : ""}</button>`).join("")}</div>
     ${sec ? `<div class="card spread small"><span>${sectorOff(sec) ? `El sector <b>${esc(sec)}</b> está apagado: sus productos no salen en Vender, Contar ni en las listas.` : `Sector <b>${esc(sec)}</b>: ${list.length} productos.`}</span>
-      <button class="btn sm" id="secoff">${sectorOff(sec) ? "Prender sector" : "Apagar sector"}</button></div>` : ""}
+      <button class="btn sm" id="secoff" data-perm="precios">${sectorOff(sec) ? "Prender sector" : "Apagar sector"}</button></div>` : ""}
     <div class="card" style="padding-block:0"><div class="list" id="plist">${list.map(p => `<button class="item tap" data-open="${p.id}"><div class="main"><div class="name">${esc(p.name)}</div><div class="sub">${p.price > 0 ? clp(p.price) + (p.kg ? " el kilo" : "") : '<b style="color:var(--warn)">Sin precio</b>'} · ${esc(p.cat)}${p.barcode?" · con código":""}</div></div>${stockPill(p)}</button>`).join("") || `<div class="empty">Sin resultados.</div>`}</div></div>
     <p class="small muted" style="margin:0">Lo que no vendas, apágalo: en la ficha de cada producto, o un sector completo eligiéndolo arriba. Nada se borra.</p>
-    <button class="btn ghost block" id="addcat">Sumar productos de un catálogo</button>
+    <button class="btn ghost block" id="addcat" data-perm="precios">Sumar productos de un catálogo</button>
   </div>`;
 }
 function openProduct(p){
@@ -1048,6 +1056,8 @@ function openProduct(p){
     await act.updateProduct(p, f);
     closeModal(); toast("Producto actualizado"); render(); });
   const ev = $("#evenc"); if (ev) ev.onclick = () => { closeModal(); ui.venc = { pid:p.id }; go("vencimientos"); };
+  if (!puede("costos")) $("#ec").closest(".field").remove();
+  if (!puede("precios")){ document.querySelectorAll(".overlay input").forEach(i => i.disabled = true); $("#esave").replaceWith(Object.assign(document.createElement("p"), { className:"small muted", style:"margin:0", textContent:"Tu usuario puede ver este producto, pero no cambiarlo." })); }
 }
 function openProductForm(sector, code, cb){
   openModal(`<div class="stack">
@@ -1225,8 +1235,8 @@ function openReservaWeb(r){
       : r.estado === "nueva" ? `<div class="grid2"><button class="btn primary" id="rwok">Confirmar</button><button class="btn" id="rwno" style="color:var(--bad)">Rechazar</button></div>`
       : `${r.estado === "confirmada" ? `<button class="btn primary block" id="rwdone">Marcar como entregada</button>` : ""}
          <a class="btn block" style="text-align:center" href="${esc(waLink(r.tel, msg))}" ${WA_TARGET}>Avisarle por WhatsApp</a>${waWebNote("rwweb", r.tel, msg)}`}
-    ${bloqueado ? `<button class="btn ghost block" id="rwunblock">Desbloquear este número</button>` : `<button class="btn ghost block" id="rwblock">Bloquear este número</button>`}
-    <p class="small muted" style="margin:0">Un número bloqueado ya no puede reservar desde la página. Úsalo si alguien reserva y no viene, o manda reservas falsas.</p>
+    ${!puede("config") ? "" : bloqueado ? `<button class="btn ghost block" id="rwunblock">Desbloquear este número</button>` : `<button class="btn ghost block" id="rwblock">Bloquear este número</button>`}
+    <p class="small muted" style="margin:0" data-perm="config">Un número bloqueado ya no puede reservar desde la página. Úsalo si alguien reserva y no viene, o manda reservas falsas.</p>
   </div>`);
   const set = cambios => run(async () => { await act.put("reservas", [Object.assign({}, r, cambios)]); render(); openReservaWeb(S.reservas.find(x => x.id === r.id)); });
   const b = id => $(id) || {};
@@ -1408,7 +1418,7 @@ function avisosInicio(){
 
 // ---------- Quién atiende ----------
 const personasActivas = () => S.personas.filter(x => x.activo !== false).sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
-const quien = () => ext("personas") && meta.persona && S.personas.some(x => x.id === meta.persona && x.activo !== false) ? meta.persona : "";
+const quien = () => cuentasOn() && meta.cuenta ? meta.cuenta.usuario.id : ext("personas") && meta.persona && S.personas.some(x => x.id === meta.persona && x.activo !== false) ? meta.persona : "";
 const nombrePersona = id => S.personas.find(x => x.id === id)?.nombre || "";
 const withWho = o => { const q = quien(); if (q) o.quien = q; return o; };
 async function setPersona(id){ meta.persona = id; await LocalDB.setMeta("persona", id); }
@@ -1968,7 +1978,7 @@ function viewResumen(){
     <div class="chips">${Object.entries(PERIODOS).map(([key, v]) => `<button class="chip" data-per="${key}" aria-pressed="${key === k}">${v}</button>`).join("")}</div>
     <div class="kpis">
       <div class="card kpi"><div class="num">${clp(r.total)}</div><div class="lbl">vendido · ${r.ventas} ${r.ventas === 1 ? "venta" : "ventas"}</div></div>
-      <div class="card kpi"><div class="num">${clp(r.gan)}</div><div class="lbl">ganancia estimada</div></div>
+      <div class="card kpi" data-perm="costos"><div class="num">${clp(r.gan)}</div><div class="lbl">ganancia estimada</div></div>
       <div class="card kpi"><div class="num">${clp(r.ventas ? r.total / r.ventas : 0)}</div><div class="lbl">promedio por venta</div></div>
       <div class="card kpi"><div class="num">${r.top.length ? esc(fq(P(r.top[0][0]), r.top[0][1].q)) : "—"}</div><div class="lbl">${r.top.length ? esc(P(r.top[0][0]).name) : "lo más vendido"}</div></div>
     </div>
@@ -2084,6 +2094,7 @@ const AYUDA = {
   personas:["Agrega a quienes atienden y elige quién está en este dispositivo.", "Cada venta, recepción y conteo queda con su nombre."],
   historial:["Todo lo que entra, sale y se cuenta, del más nuevo al más viejo.", "Toca una venta para ver su comprobante (si está activado)."],
   reservas:["Las reservas de internet llegan solas y suenan. Tócalas para confirmarlas o rechazarlas y avisarle al cliente por WhatsApp.", "Las demás se marcan como entregadas con un toque.", "Si alguien reserva y no viene, bloquea su número desde la reserva."],
+  cuentas:["Con las cuentas activas, cada persona entra con su usuario y contraseña.", "El vendedor vende, anota fiados, reservas y encargos, y cierra la caja; puedes darle permisos extra.", "El encargado puede todo menos crear cuentas. Solo el dueño administra las cuentas.", "Si alguien deja de trabajar en la tienda, quítale el acceso: su celular deja de recibir y enviar datos."],
   pagina:["Activa la página y comparte el link por WhatsApp o imprime el cartel con el código QR.", "Muestra los productos con precio. Lo que apagues o no tenga precio no aparece.", "Los clientes reservan con su nombre y celular, y ven cuando la confirmas.", "Para que la abran desde su casa, el servidor tiene que estar conectado a internet con candado (https)."],
   tipospan:["Elige para cada pan si se vende por unidad o por kilo, su precio, si tiene botón rápido y si se puede reservar."]
 };
@@ -2258,12 +2269,12 @@ function viewDatos(){
     </div>
     ${meta.demo ? "" : syncCard()}
     <div class="card stack"><h3>Instalar</h3>${install}</div>
-    <div class="card stack"><h3>Respaldo</h3>
+    <div class="card stack" data-perm="config"><h3>Respaldo</h3>
       <p class="small muted" style="margin:0">Descarga una copia de todo en un archivo y guárdala en otro lugar (computador, Google Drive o WhatsApp a ti mismo). Conviene hacerlo una vez por semana.</p>
       <button class="btn block" id="backup">Descargar respaldo</button>
       <label class="btn block filebtn">Restaurar desde un respaldo<input type="file" id="restore" accept="application/json,.json"></label>
     </div>
-    <div class="card stack"><h3>Borrar todo</h3>
+    <div class="card stack" data-perm="config"><h3>Borrar todo</h3>
       <p class="small muted" style="margin:0">Borra la tienda y todos sus datos de este dispositivo. Descarga un respaldo antes.</p>
       <button class="btn block" id="wipe" style="color:var(--bad)">Borrar todo de este dispositivo</button>
     </div>
@@ -2282,13 +2293,13 @@ function syncCard(){
     : st.status === "error" ? `No se pudo conectar: ${esc(st.error)}. Los cambios se guardan aquí y se envían cuando vuelva la conexión.` : "";
   return `<div class="card stack"><h3>Sincronización</h3>
     <p class="small" style="margin:0">${estado}</p>
-    <div class="field"><label for="sserv">Dirección del servidor</label><div class="searchbar"><input class="input code" id="sserv" value="${esc(meta.servidor)}" placeholder="Ej: http://192.168.1.20:8090" autocapitalize="none" inputmode="url"><button class="btn" id="ssave">Guardar</button></div></div>
+    <div class="field" data-perm="config"><label for="sserv">Dirección del servidor</label><div class="searchbar"><input class="input code" id="sserv" value="${esc(meta.servidor)}" placeholder="Ej: http://192.168.1.20:8090" autocapitalize="none" inputmode="url"><button class="btn" id="ssave">Guardar</button></div></div>
     ${on ? `<button class="btn block" id="snow">Sincronizar ahora</button>
     <div class="field"><label>Sumar otro celular o computador</label>
       <p class="small muted" style="margin:0">Abre este link en el otro dispositivo ${/^https:/.test(meta.servidor) ? "" : "(tiene que estar en el mismo wifi mientras el servidor esté en tu computador)"}:</p>
       <div class="code">${esc(inviteLink())}</div></div>
     <div class="grid2"><a class="btn" style="text-align:center" href="${esc(waLink("", "Únete a " + (S.ajustes.tienda_nombre || "la tienda") + " en Mi Almacén: " + inviteLink()))}" ${WA_TARGET}>Enviar por WhatsApp</a><button class="btn" id="scopy">Copiar link</button></div>` : ""}
-    <p class="small muted" style="margin:0">Código de la tienda: <span class="code">${esc(meta.tienda?.id || "")}</span>. No lo compartas con personas ajenas: por ahora es la llave para entrar a los datos.</p>
+    <p class="small muted" style="margin:0">Código de la tienda: <span class="code">${esc(meta.tienda?.id || "")}</span>. ${cuentasOn() ? "Además del link, cada persona necesita su usuario y contraseña." : "No lo compartas con personas ajenas: es la llave para entrar a los datos. Para más seguridad, activa las cuentas en Más &gt; Cuentas y permisos."}</p>
   </div>`;
 }
 
@@ -2336,7 +2347,7 @@ function confirmWipe(after){
 
 function viewMas(){
   const pend = S.reservas.filter(r => !r.done && r.estado !== "rechazada").length;
-  const opt = (go, icon, title, sub) => `<button class="sector" data-go="${go}"><span class="name" style="display:flex;gap:10px;align-items:center"><span style="width:22px;height:22px;display:inline-flex" class="mi">${ICONS[icon]}</span>${title}</span><span></span><span class="sub">${sub}</span></button>`;
+  const opt = (go, icon, title, sub) => VIEW_PERM[go] && !puede(VIEW_PERM[go]) ? "" : `<button class="sector" data-go="${go}"><span class="name" style="display:flex;gap:10px;align-items:center"><span style="width:22px;height:22px;display:inline-flex" class="mi">${ICONS[icon]}</span>${title}</span><span></span><span class="sub">${sub}</span></button>`;
   const sec = (t, items) => { const h = items.filter(Boolean).join(""); return h ? `<h3 style="margin-top:8px">${t}</h3>${h}` : ""; };
   return `${header("Más", "Otras herramientas")}
   <div class="stack">
@@ -2358,6 +2369,7 @@ function viewMas(){
     ${sec("Configuración", [
       ext("personas") && opt("personas","personas","Quién atiende", quien() ? "Ahora atiende " + esc(nombrePersona(quien())) : "Elige quién atiende en este dispositivo"),
       `<button class="sector" id="tourbtn"><span class="name" style="display:flex;gap:10px;align-items:center"><span style="width:22px;height:22px;display:inline-flex" class="mi">${ICONS.ayuda}</span>Tutorial</span><span></span><span class="sub">Un recorrido corto por la app</span></button>`,
+      meta.servidor && !meta.demo && opt("cuentas","personas","Cuentas y permisos", cuentasOn() ? `Entraste como ${esc(meta.cuenta?.usuario?.nombre || "")}` : "Usuario y contraseña para cada persona que atiende"),
       opt("extensiones","extensiones","Extensiones", "Activa solo las funciones que usa tu negocio"),
       opt("apariencia","apariencia","Apariencia", "Colores, estilo y tipo de letra"),
       opt("datos","datos","Tienda y datos", `${meta.pending} cambios guardados en este dispositivo · respaldo e instalación`)])}
@@ -2374,14 +2386,15 @@ function bindSearch(onPick, qs = "#q", rs = "#res", opts){
 function render(){
   if (!MODE) return;
   purgeReservas();
-  if (VIEW_EXT[ui.view] && !extOn(VIEW_EXT[ui.view])) ui.view = "inicio";
+  if (necesitaEntrar()) return showLogin();
+  if ((VIEW_EXT[ui.view] && !extOn(VIEW_EXT[ui.view])) || (VIEW_PERM[ui.view] && !puede(VIEW_PERM[ui.view]))) ui.view = "inicio";
   applyTheme();
   renderTabs();
   const v = ui.view, app = $("#app");
   app.innerHTML = ({ inicio:viewInicio, vender:viewVender, recibir:viewRecibir, contar:viewContar, productos:viewProductos, historial:viewHistorial, fiados:viewFiados, mas:viewMas,
     reservas:viewReservas, datos:viewDatos, extensiones:viewExtensiones, apariencia:viewApariencia, compras:viewCompras, vencimientos:viewVencimientos,
-    proveedores:viewProveedores, caja:viewCaja, tipospan:viewTiposPan, resumen:viewResumen, ofertas:viewOfertas, personas:viewPersonas, encargos:viewEncargos, pagina:viewPagina })[v]();
-  ({ resumen:bindResumen, tipospan:bindTiposPan, compras:bindCompras, vencimientos:bindVencimientos, proveedores:bindProveedores, caja:bindCaja, ofertas:bindOfertas, personas:bindPersonas, encargos:bindEncargos, pagina:bindPagina })[v]?.(app);
+    proveedores:viewProveedores, caja:viewCaja, tipospan:viewTiposPan, resumen:viewResumen, ofertas:viewOfertas, personas:viewPersonas, encargos:viewEncargos, pagina:viewPagina, cuentas:viewCuentas })[v]();
+  ({ resumen:bindResumen, tipospan:bindTiposPan, compras:bindCompras, vencimientos:bindVencimientos, proveedores:bindProveedores, caja:bindCaja, ofertas:bindOfertas, personas:bindPersonas, encargos:bindEncargos, pagina:bindPagina, cuentas:bindCuentas })[v]?.(app);
   vitrinaSoon();
   app.querySelectorAll("[data-go]").forEach(b => b.onclick = () => go(b.dataset.go));
   app.querySelectorAll("[data-back]").forEach(b => b.onclick = back);
@@ -2390,6 +2403,7 @@ function render(){
   const tc = $("#tourno"); if (tc) tc.onclick = () => run(async () => { await setPref({ tourVisto:true }); rerender(); });
   const ts = $("#toursi"); if (ts) ts.onclick = () => { setPref({ tourVisto:true }); tour(0); };
   app.querySelectorAll("[data-ayuda]").forEach(b => b.onclick = () => openAyuda(ui.view));
+  setTimeout(() => app.querySelectorAll("[data-perm]").forEach(el => { if (!puede(el.dataset.perm)) el.remove(); }));
   if (v === "fiados"){
     $("#addc").onclick = openNewClient;
     app.querySelectorAll("[data-client]").forEach(b => b.onclick = () => openCliente(S.clients.find(c => c.id === b.dataset.client)));
@@ -2535,9 +2549,11 @@ async function openStore(){
   clearInvite();
   if (!meta.demo && !meta.servidor){ const o = await localServer(); if (o){ meta.servidor = o; await LocalDB.setMeta("servidor", o); } }
   MODE = "local"; $("nav.tabs").hidden = false; history.replaceState({ v:ui.view, n:0 }, ""); render();
-  if (!meta.demo && meta.servidor) Sync.start(meta.servidor, meta.tienda.id); else Sync.stop();
+  Sync.state.token = meta.cuenta?.token || "";
+  if (!meta.demo && meta.servidor){ Sync.start(meta.servidor, meta.tienda.id); refrescarCuenta(); } else Sync.stop();
 }
-Sync.state.onStatus = () => { LocalDB.pendingCount().then(n => { meta.pending = n; if (MODE) updateNet(); }, () => {}); };
+Sync.state.onStatus = s => { LocalDB.pendingCount().then(n => { meta.pending = n; if (MODE) updateNet(); }, () => {}); if (s === "cuenta" && MODE) render(); };
+Sync.state.onRechazo = n => toast(n === 1 ? "Un cambio no se guardó porque tu usuario no tiene permiso" : `${n} cambios no se guardaron porque tu usuario no tiene permiso`);
 Sync.state.onChange = async () => { await loadLocal(); avisarReservas(); if (MODE) softRender(); };
 
 function showSetup(){
@@ -2564,6 +2580,7 @@ function showSetup(){
       <button class="btn primary block" id="screate">Crear tienda</button>
     </div>
     <button class="btn block" id="sjoin">Unirme a una tienda que ya existe</button>
+    <button class="btn block" id="slogin">Entrar con mi usuario</button>
     <button class="btn block" id="sdemo">Solo quiero probar con datos de ejemplo</button>
     <label class="btn ghost block filebtn">Tengo un respaldo: restaurarlo<input type="file" id="srestore" accept="application/json,.json"></label>
   </div>`);
@@ -2586,28 +2603,194 @@ function showSetup(){
   });
   $("#sdemo").onclick = () => run(async () => { meta.servidor = ""; await createStore("Almacén de ejemplo", "", "ejemplo"); ui.view = "inicio"; await openStore(); });
   $("#sjoin").onclick = () => run(async () => showJoin(await localServer(), ""));
+  $("#slogin").onclick = () => run(async () => showJoin(await localServer(), "", true));
   $("#srestore").onchange = e => run(() => restoreBackup(e.target));
 }
 
-function showJoin(servidor, tienda){
+function showJoin(servidor, tienda, conCuenta){
   gate(`${gateHead()}<div class="stack">
-    <div class="card stack"><h2>Unirme a una tienda</h2>
-      <p class="small muted" style="margin:0">Este dispositivo va a descargar todos los datos de la tienda y desde ahí se mantiene al día con los demás. Lo más fácil es abrir el link de invitación que se comparte desde Más > Tienda y datos en el dispositivo de la tienda.</p>
+    <div class="card stack"><h2>${conCuenta ? "Entrar con mi usuario" : "Unirme a una tienda"}</h2>
+      <p class="small muted" style="margin:0">Este dispositivo va a descargar todos los datos de la tienda y desde ahí se mantiene al día con los demás. ${conCuenta ? "Usa el usuario y la contraseña que te dio el dueño de la tienda." : "Lo más fácil es abrir el link de invitación que se comparte desde Más > Tienda y datos en el dispositivo de la tienda."}</p>
       <div class="field"><label for="jserv">Dirección del servidor</label><input class="input code" id="jserv" value="${esc(servidor || "")}" placeholder="Ej: http://192.168.1.20:8090" autocapitalize="none" inputmode="url"></div>
-      <div class="field"><label for="jcode">Código de la tienda</label><input class="input code" id="jcode" value="${esc(tienda || "")}" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" autocapitalize="none" autocomplete="off"></div>
-      <button class="btn primary block" id="jgo">Unirme y descargar los datos</button>
+      <div class="field" ${conCuenta && !tienda ? "hidden" : ""} id="jcodef"><label for="jcode">Código de la tienda</label><input class="input code" id="jcode" value="${esc(tienda || "")}" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" autocapitalize="none" autocomplete="off"></div>
+      <div class="stack" id="jcuenta" style="gap:12px" ${conCuenta ? "" : "hidden"}>
+        <p class="pill warn" id="javiso" style="white-space:normal;margin:0;padding:8px 10px" hidden>Esta tienda usa cuentas: entra con tu usuario y contraseña.</p>
+        <div class="field"><label for="juser">Usuario</label><input class="input" id="juser" autocapitalize="none" autocomplete="username"></div>
+        <div class="field"><label for="jpass">Contraseña</label><input class="input" id="jpass" type="password" autocomplete="current-password"></div>
+        <div class="field" id="jselbox" hidden><label for="jsel">Tienda</label><select class="input" id="jsel"></select></div>
+      </div>
+      <button class="btn primary block" id="jgo">${conCuenta ? "Entrar" : "Unirme y descargar los datos"}</button>
     </div>
     <button class="btn ghost block" id="jback">Volver</button>
   </div>`);
+  let sesion = null;
   $("#jback").onclick = () => { clearInvite(); location.reload(); };
   $("#jgo").onclick = () => run(async () => {
-    const url = $("#jserv").value.trim().replace(/\/+$/, ""), code = $("#jcode").value.trim().toLowerCase();
+    const url = $("#jserv").value.trim().replace(/\/+$/, "");
+    let code = $("#jcode").value.trim().toLowerCase();
     if (!/^https?:\/\//.test(url)) return toast("Escribe la dirección completa del servidor, con http:// o https://");
+    const usuario = $("#juser").value.trim();
+    if (usuario && !sesion){ sesion = await entrar(url, usuario, $("#jpass").value);
+      if (!code){ if (!sesion.tiendas.length){ sesion = null; return toast("Tu usuario todavía no tiene acceso a ninguna tienda"); }
+        if (sesion.tiendas.length > 1){ $("#jsel").innerHTML = sesion.tiendas.map(t => `<option value="${t.tienda}">${esc(t.nombre || t.tienda)}</option>`).join(""); $("#jselbox").hidden = false; $("#jgo").textContent = "Entrar a esta tienda"; return; }
+        code = sesion.tiendas[0].tienda; } }
+    if (sesion && !code) code = $("#jsel").value;
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(code)) return toast("El código de la tienda no está completo");
-    const b = $("#jgo"); b.disabled = true; b.textContent = "Descargando datos…";
-    try { await joinStore(url, code); } catch(e){ await LocalDB.wipe().catch(() => {}); Sync.stop(); throw e; } finally { b.disabled = false; b.textContent = "Unirme y descargar los datos"; }
+    if (sesion && !sesion.tiendas.some(t => t.tienda === code)){ sesion = null; return toast("Tu usuario no tiene acceso a esta tienda"); }
+    const b = $("#jgo"), txt = b.textContent; b.disabled = true; b.textContent = "Descargando datos…";
+    try { await joinStore(url, code, sesion); }
+    catch(e){ await LocalDB.wipe().catch(() => {}); Sync.stop();
+      if (e.code === "cuenta" && !sesion){ $("#jcuenta").hidden = false; $("#javiso").hidden = false; $("#juser").focus(); return; }
+      throw e; }
+    finally { b.disabled = false; b.textContent = txt; }
     clearInvite(); ui.view = "inicio"; await openStore(); toast(`Listo: ${S.ajustes.tienda_nombre || "la tienda"} está en este dispositivo`);
   });
+}
+
+// ---------- Cuentas y permisos (Fase 4) ----------
+// Con las cuentas activas (ajustes.cuentas), cada dispositivo entra con un usuario. meta.cuenta guarda la sesión
+// de este dispositivo: { token, usuario:{ id, usuario, nombre }, tiendas:[{ tienda, nombre, rol, permisos }] }.
+// El servidor revisa cada cambio contra los permisos; la app además esconde lo que no se puede usar.
+const cuentasOn = () => !!S?.ajustes?.cuentas;
+const miTienda = () => meta.cuenta?.tiendas?.find(t => t.tienda === meta.tienda?.id) || null;
+const puede = k => !cuentasOn() || !!miTienda()?.permisos?.[k];
+const necesitaEntrar = () => !meta.demo && !!meta.tienda && (cuentasOn() || Sync.state.status === "cuenta") && (!miTienda() || Sync.state.status === "cuenta");
+const ROLES = { dueno:"Dueño", encargado:"Encargado", vendedor:"Vendedor" };
+const PERMISOS = { precios:"Cambiar productos, precios y ofertas", costos:"Ver costos, ganancias y proveedores", inventario:"Contar, recibir mercadería y vencimientos", reportes:"Ver el resumen de ventas y el historial", config:"Cambiar ajustes, extensiones, apariencia y la página" };
+async function cuentaApi(base, path, body, token){
+  const h = { "Content-Type":"application/json" }; if (token) h.Authorization = token;
+  let r; try { r = await fetch(base.replace(/\/+$/, "") + path, body ? { method:"POST", headers:h, body:JSON.stringify(body) } : { headers:h, cache:"no-store" }); }
+  catch(e){ throw new Error("No hay conexión con el servidor. Para esto se necesita estar conectado."); }
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw Object.assign(new Error(j.message || `El servidor respondió ${r.status}`), { status:r.status });
+  return j;
+}
+const api = (path, body) => cuentaApi(meta.servidor, path, body, meta.cuenta?.token);
+const entrar = (base, usuario, password) => cuentaApi(base, "/api/cuentas/entrar", { usuario, password });
+async function guardarCuenta(c){ meta.cuenta = c; await LocalDB.setMeta("cuenta", c); Sync.state.token = c?.token || ""; }
+// Renueva la sesión y los permisos cuando hay conexión
+async function refrescarCuenta(){
+  if (!meta.cuenta?.token || !meta.servidor) return;
+  try { await guardarCuenta(await api("/api/cuentas/yo")); if (MODE && !document.querySelector(".overlay")) softRender(); } catch(e){}
+}
+
+function showLogin(){
+  const quitado = meta.cuenta && Sync.state.status === "cuenta";
+  gate(`${gateHead()}<div class="stack">
+    <div class="card stack"><h2>${esc(S?.ajustes?.tienda_nombre || meta.tienda?.nombre || "Tu tienda")}</h2>
+      <p class="small muted" style="margin:0">${quitado ? esc(Sync.state.error || "Tu sesión terminó.") + " Vuelve a entrar." : "Esta tienda usa cuentas. Entra con tu usuario y contraseña."}</p>
+      <div class="field"><label for="luser">Usuario</label><input class="input" id="luser" autocapitalize="none" autocomplete="username" value="${esc(meta.cuenta?.usuario?.usuario || "")}"></div>
+      <div class="field"><label for="lpass">Contraseña</label><input class="input" id="lpass" type="password" autocomplete="current-password"></div>
+      <button class="btn primary block" id="lgo">Entrar</button>
+      ${meta.pending ? `<p class="small muted" style="margin:0">Hay ${meta.pending} cambios guardados en este dispositivo. Se envían al entrar.</p>` : ""}
+    </div>
+    <button class="btn ghost block" id="lwipe">Borrar este dispositivo y usar otra tienda</button>
+  </div>`);
+  const go = () => run(async () => {
+    const s = await entrar(meta.servidor, $("#luser").value, $("#lpass").value);
+    if (!s.tiendas.some(t => t.tienda === meta.tienda.id)) return toast("Tu usuario no tiene acceso a esta tienda");
+    await guardarCuenta(s); Sync.state.status = "off"; ui.view = "inicio"; await openStore(); toast(`Hola, ${s.usuario.nombre}`);
+  });
+  $("#lgo").onclick = go; $("#lpass").onkeydown = e => { if (e.key === "Enter") go(); };
+  $("#lwipe").onclick = () => confirmWipe(showSetup);
+  setTimeout(() => { if (document.activeElement === document.body) $(meta.cuenta ? "#lpass" : "#luser")?.focus(); }, 50);
+}
+
+function viewCuentas(){
+  const yo = meta.cuenta, t = miTienda();
+  if (!cuentasOn()) return `${header("Cuentas y permisos", "Usuario y contraseña para cada persona")}
+  <div class="stack">
+    <div class="card stack">
+      <p style="margin:0">Hoy cualquiera con el link de invitación entra a la tienda y puede hacer de todo. Con las cuentas, cada persona entra con su usuario y contraseña, y tú eliges qué puede hacer.</p>
+      <ul class="small" style="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px"><li><b>Vendedor:</b> vende, anota fiados, reservas y encargos, y cierra la caja. Puedes darle permisos extra, como contar o recibir.</li><li><b>Encargado:</b> todo, menos crear cuentas.</li><li><b>Dueño:</b> todo, y administra las cuentas.</li></ul>
+      <p class="small muted" style="margin:0">Al activarlas, todos los dispositivos de la tienda van a pedir usuario y contraseña. Se necesita conexión con el servidor.</p>
+    </div>
+    <div class="card stack"><h3>Tu cuenta de dueño</h3>
+      <div class="field"><label for="cnom">Tu nombre</label><input class="input" id="cnom" value="${esc(meta.tienda?.persona || "")}" autocomplete="name"></div>
+      <div class="field"><label for="cusr">Usuario</label><input class="input" id="cusr" autocapitalize="none" autocomplete="username" placeholder="Ej: rosa"></div>
+      <div class="field"><label for="cpw">Contraseña</label><input class="input" id="cpw" type="password" autocomplete="new-password" placeholder="Al menos 6 caracteres"></div>
+      <div class="field"><label for="cpw2">Repite la contraseña</label><input class="input" id="cpw2" type="password" autocomplete="new-password"></div>
+      <button class="btn primary block" id="cact">Activar las cuentas</button>
+    </div>
+  </div>`;
+  return `${header("Cuentas y permisos", "Quién entra y qué puede hacer")}
+  <div class="stack">
+    <div class="card stack"><h3>Tu cuenta</h3>
+      <div class="spread"><div><div style="font-weight:700">${esc(yo?.usuario?.nombre || "")}</div><div class="small muted">Usuario ${esc(yo?.usuario?.usuario || "")} · ${esc(ROLES[t?.rol] || "")}</div></div></div>
+      <div class="grid2"><button class="btn" id="cclave">Cambiar contraseña</button><button class="btn" id="csalir">Cambiar de usuario</button></div>
+    </div>
+    ${puede("cuentas") ? `<div class="card stack"><div class="spread"><h3>Personas con acceso</h3><button class="btn sm" id="cadd">+ Agregar</button></div>
+      <div class="list" id="clist"><div class="empty">Cargando…</div></div>
+      <p class="small muted" style="margin:0">Para que alguien entre desde otro celular: abre la app en ese celular, toca "Entrar con mi usuario" y escribe su usuario y contraseña.</p></div>` : ""}
+  </div>`;
+}
+const PERM_CORTO = { precios:"precios", costos:"costos", inventario:"inventario", reportes:"reportes", config:"ajustes" };
+const permTxt = m => m.rol === "vendedor" ? "vende" + Object.keys(PERMISOS).filter(k => m.permisos?.[k]).map(k => " · " + PERM_CORTO[k]).join("") : m.rol === "dueno" ? "todo y las cuentas" : "todo menos las cuentas";
+function bindCuentas(app){
+  if (!cuentasOn()){
+    $("#cact").onclick = () => run(async () => {
+      const nombre = $("#cnom").value.trim(), usuario = $("#cusr").value.trim(), pw = $("#cpw").value;
+      if (!nombre) return $("#cnom").focus(); if (!usuario) return $("#cusr").focus();
+      if (pw !== $("#cpw2").value) return toast("Las contraseñas no son iguales");
+      await Sync.syncNow();
+      const s = await api("/api/cuentas/activar", { tienda:meta.tienda.id, nombre, usuario, password:pw });
+      await guardarCuenta(s);
+      await act.put("personas", [{ id:s.usuario.id, nombre:s.usuario.nombre, activo:true }]);
+      await act.setting("cuentas", true);
+      render(); toast("Cuentas activadas. Ahora agrega a quienes atienden.");
+    });
+    return;
+  }
+  $("#csalir").onclick = () => {
+    const salir = () => run(async () => { await guardarCuenta(null); closeModal(); render(); });
+    if (!meta.pending) return salir();
+    openModal(`<div class="stack"><h2>Hay cambios sin enviar</h2><p style="margin:0">Este dispositivo tiene ${meta.pending} cambios que todavía no llegan al servidor. Si cambias de usuario, se van a enviar con el usuario nuevo, y si no tiene permiso para alguno, ese cambio se pierde.</p>
+      <div class="grid2"><button class="btn" data-close>Esperar</button><button class="btn primary" id="csok">Cambiar igual</button></div></div>`);
+    $("#csok").onclick = salir;
+  };
+  $("#cclave").onclick = () => { openModal(`<div class="stack"><div class="spread"><h2>Cambiar contraseña</h2><button class="btn ghost sm" data-close>Cerrar</button></div>
+      <div class="field"><label for="ka">Contraseña actual</label><input class="input" id="ka" type="password" autocomplete="current-password"></div>
+      <div class="field"><label for="kn">Contraseña nueva</label><input class="input" id="kn" type="password" autocomplete="new-password" placeholder="Al menos 6 caracteres"></div>
+      <button class="btn primary block" id="kok">Guardar</button></div>`);
+    $("#kok").onclick = () => run(async () => { await guardarCuenta(await api("/api/cuentas/clave", { actual:$("#ka").value, nueva:$("#kn").value })); closeModal(); toast("Contraseña cambiada"); }); };
+  if (!puede("cuentas")) return;
+  const pintar = ms => { const l = $("#clist"); if (!l) return;
+    l.innerHTML = ms.map(m => `<button class="item tap" data-cm="${m.id}"><div class="main"><div class="name">${esc(m.nombre)}${m.usuarioId === meta.cuenta.usuario.id ? ` <span class="small muted">· tú</span>` : ""}</div><div class="sub">${esc(m.usuario)} · ${esc(permTxt(m))}</div></div>
+      ${m.activo ? `<span class="pill ${m.rol === "vendedor" ? "none" : "ok"}">${ROLES[m.rol]}</span>` : `<span class="pill bad">Sin acceso</span>`}</button>`).join("");
+    l.querySelectorAll("[data-cm]").forEach(b => b.onclick = () => openMiembro(ms.find(m => m.id === b.dataset.cm))); };
+  api(`/api/cuentas/miembros?tienda=${meta.tienda.id}`).then(r => { ui.miembros = r.miembros; pintar(r.miembros); }, e => { const l = $("#clist"); if (l) l.innerHTML = `<div class="empty">${esc(e.message)}</div>`; });
+  $("#cadd").onclick = () => openMiembro(null);
+}
+// Crear o cambiar a una persona: rol, permisos extra, contraseña y acceso
+function openMiembro(m){
+  const nuevo = !m, rol0 = m?.rol || "vendedor", extra = m?.extra || {};
+  openModal(`<div class="stack">
+    <div class="spread"><h2>${nuevo ? "Agregar persona" : esc(m.nombre)}</h2><button class="btn ghost sm" data-close>Cerrar</button></div>
+    ${nuevo ? `<div class="field"><label for="mnom">Nombre</label><input class="input" id="mnom" placeholder="Ej: Pedro"></div>
+    <div class="field"><label for="musr">Usuario</label><input class="input" id="musr" autocapitalize="none" autocomplete="off" placeholder="Ej: pedro"></div>` : `<p class="small muted" style="margin:0">Usuario: ${esc(m.usuario)}</p>`}
+    <div class="field"><label for="mpw">${nuevo ? "Contraseña" : "Contraseña nueva (opcional)"}</label><input class="input" id="mpw" type="text" autocomplete="off" placeholder="Al menos 6 caracteres"></div>
+    <div class="field"><label>Rol</label><div class="seg" role="group">${Object.entries(ROLES).map(([k, v]) => `<button data-mrol="${k}" aria-pressed="${k === rol0}">${v}</button>`).join("")}</div></div>
+    <div class="stack" id="mperm" style="gap:8px" ${rol0 === "vendedor" ? "" : "hidden"}><div class="small" style="font-weight:600">Además de vender, puede:</div>
+      ${Object.entries(PERMISOS).map(([k, v]) => `<label class="row small"><input type="checkbox" data-mp="${k}" ${extra[k] ? "checked" : ""}> ${esc(v)}</label>`).join("")}</div>
+    <button class="btn primary block" id="msave">${nuevo ? "Crear usuario" : "Guardar cambios"}</button>
+    ${nuevo ? `<p class="small muted" style="margin:0">Después dale a esa persona su usuario y contraseña. Puede cambiar la contraseña desde su celular.</p>`
+      : m.usuarioId === meta.cuenta.usuario.id ? "" : `<button class="btn ghost block" id="macc" style="${m.activo ? "color:var(--bad)" : ""}">${m.activo ? "Quitarle el acceso" : "Devolverle el acceso"}</button>`}
+  </div>`);
+  let rol = rol0;
+  document.querySelectorAll("[data-mrol]").forEach(b => b.onclick = () => { rol = b.dataset.mrol; document.querySelectorAll("[data-mrol]").forEach(x => x.setAttribute("aria-pressed", x === b)); $("#mperm").hidden = rol !== "vendedor"; });
+  const permisos = () => Object.fromEntries([...document.querySelectorAll("[data-mp]")].filter(i => i.checked).map(i => [i.dataset.mp, true]));
+  const listo = msg => { closeModal(); render(); toast(msg); };
+  $("#msave").onclick = () => run(async () => {
+    const pw = $("#mpw").value;
+    if (nuevo){ const nombre = $("#mnom").value.trim(), usuario = $("#musr").value.trim(); if (!nombre) return $("#mnom").focus(); if (!usuario) return $("#musr").focus();
+      const r = await api("/api/cuentas/miembros", { tienda:meta.tienda.id, nombre, usuario, password:pw, rol, permisos:permisos() });
+      if (!S.personas.some(x => x.id === r.usuarioId)) await act.put("personas", [{ id:r.usuarioId, nombre:r.nombre, activo:true }]);
+      return listo(`${r.nombre} ya puede entrar como ${r.usuario}`); }
+    await api(`/api/cuentas/miembros/${m.id}`, Object.assign({ tienda:meta.tienda.id, rol, permisos:permisos() }, pw ? { password:pw } : {}));
+    if (m.usuarioId === meta.cuenta.usuario.id) await refrescarCuenta();
+    listo("Cambios guardados");
+  });
+  const ac = $("#macc"); if (ac) ac.onclick = () => run(async () => { await api(`/api/cuentas/miembros/${m.id}`, { tienda:meta.tienda.id, activo:!m.activo }); listo(m.activo ? `${m.nombre} ya no puede entrar` : `${m.nombre} puede volver a entrar`); });
 }
 
 // ---------- Pistola de códigos ----------

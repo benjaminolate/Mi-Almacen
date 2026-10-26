@@ -14,7 +14,7 @@ routerUse((e) => {
   if (!c.desdeInternet(e)) return e.next();
   const path = String(e.request.url.path || "/");
   const permitido = path.indexOf("/api/") !== 0 && path.indexOf("/_/") !== 0 && path.indexOf("/servidor/") !== 0 && path.indexOf("/.") < 0;
-  if (permitido || /^\/api\/(publico\/|sync$|sync\/estado$|realtime$|health$)/.test(path)) return e.next();
+  if (permitido || /^\/api\/(publico\/|cuentas\/|sync$|sync\/estado$|realtime$|health$)/.test(path)) return e.next();
   throw new ForbiddenError("Esto solo se puede abrir desde el wifi de la tienda.");
 });
 
@@ -25,6 +25,8 @@ routerAdd("POST", "/api/publico/publicar", (e) => {
   if (!c.UUID.test(tienda) || !c.PID.test(pid)) throw new BadRequestError("Datos no válidos");
   if (JSON.stringify(body.data || {}).length > 450000) throw new BadRequestError("La vitrina es demasiado grande");
   if ($app.countRecords("cambios", $dbx.hashExp({ tienda: tienda })) === 0) throw new BadRequestError("El servidor no tiene datos de esa tienda");
+  // Con cuentas activas, solo publica alguien de la tienda
+  if (c.tieneMiembros(tienda) && !c.miembroDe(e, tienda)) throw new UnauthorizedError("Entra con tu usuario.");
 
   let r = null;
   try { r = $app.findFirstRecordByData("vitrinas", "pid", pid); } catch (err) { r = null; }

@@ -97,6 +97,20 @@ En la app, activa la extensión **Página de la tienda** (Más → Extensiones) 
 
 La página muestra lo que la app publicó la última vez que estuvo conectada al servidor; si cambias un precio, se actualiza en unos segundos.
 
+## 9. Cuentas y permisos
+
+Sin cuentas, cualquiera con el link de invitación entra a la tienda y puede hacer de todo. Con cuentas, cada persona entra con su usuario y contraseña.
+
+1. En la app del dueño: **Más → Cuentas y permisos**. Escribe tu nombre, un usuario y una contraseña (al menos 6 caracteres) y toca **Activar las cuentas**. Necesita conexión con el servidor.
+2. Toca **+ Agregar** por cada persona que atiende: nombre, usuario, contraseña y rol.
+   - **Vendedor:** vende, anota fiados, reservas y encargos, y cierra la caja. Puedes marcarle permisos extra: cambiar precios, ver costos, contar y recibir, ver reportes o cambiar ajustes.
+   - **Encargado:** todo menos crear cuentas.
+   - **Dueño:** todo, y administra las cuentas.
+3. Los dispositivos que ya estaban unidos piden usuario y contraseña en la próxima sincronización. Un celular nuevo abre la app, toca **Entrar con mi usuario**, escribe la dirección del servidor, su usuario y contraseña, y descarga la tienda.
+4. Si alguien deja de trabajar contigo, entra a su nombre y toca **Quitarle el acceso**: su celular deja de recibir y enviar datos.
+
+Si olvidas tu contraseña de dueño, entra al panel `http://localhost:8090/_/` desde el computador del servidor → tabla **usuarios** → tu usuario → cambia la contraseña.
+
 ## Si algo falla
 
 | Problema | Qué hacer |

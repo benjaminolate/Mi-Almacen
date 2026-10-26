@@ -10,15 +10,17 @@
 (function(){
 "use strict";
 const BATCH = 200;
-const state = { url:"", tienda:"", status:"off", last:0, error:"", running:false, current:null, again:false, es:null, timer:null, onChange:null, onStatus:null };
+const state = { url:"", tienda:"", token:"", onRechazo:null, status:"off", last:0, error:"", running:false, current:null, again:false, es:null, timer:null, onChange:null, onStatus:null };
 
 const api = path => state.url.replace(/\/+$/, "") + path;
 const setStatus = (s, err = "") => { state.status = s; state.error = err; state.onStatus?.(s); };
 
 async function post(path, body){
-  const r = await fetch(api(path), { method:"POST", headers:{ "Content-Type":"application/json" }, body:JSON.stringify(body) });
+  // Con las cuentas activas, cada pedido lleva la sesión del usuario que entró en este dispositivo
+  const headers = { "Content-Type":"application/json" }; if (state.token) headers.Authorization = state.token;
+  const r = await fetch(api(path), { method:"POST", headers, body:JSON.stringify(body) });
   const j = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(j.message || `El servidor respondió ${r.status}`);
+  if (!r.ok) throw Object.assign(new Error(j.message || `El servidor respondió ${r.status}`), { code:j.code || "" });
   return j;
 }
 
@@ -45,6 +47,7 @@ async function cycle(){
         if (Math.abs(offset - LocalDB.clock.offset) > 1000){ LocalDB.clock.offset = offset; await LocalDB.setMeta("offset", offset); }
         await LocalDB.ack(batch.map(c => c.seq));
         changed += await LocalDB.applyRemote(res.cambios || []);
+        if (res.rechazados) state.onRechazo?.(res.rechazados);
         await LocalDB.setMeta("cursor", res.hasta);
         if (batch.length < BATCH && !res.mas) break;
       }
@@ -52,7 +55,8 @@ async function cycle(){
     state.last = Date.now(); setStatus("ok");
   } catch(e){
     console.warn("Sincronización:", e);
-    setStatus("error", navigator.onLine ? (e.message || "Sin conexión con el servidor") : "Sin internet");
+    if (e.code === "cuenta") setStatus("cuenta", e.message);
+    else setStatus("error", navigator.onLine ? (e.message || "Sin conexión con el servidor") : "Sin internet");
   } finally { state.running = false; }
   if (changed) state.onChange?.(changed);
 }

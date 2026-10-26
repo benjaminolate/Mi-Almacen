@@ -18,6 +18,7 @@ Parte del código de [Inventario_almacen_VD](https://github.com/benjaminolate/In
 - **Respaldo** en un archivo y restauración desde él, reemplazando todo o **agregando solo lo que falta**. El servidor además guarda una copia automática cada día.
 - **Resumen de ventas** de hoy, 7 días, este mes, mes pasado, este año y año pasado, con descarga a **Excel**.
 - **Página de la tienda** con link y código QR: productos, precios, si hay o no, y **reservas por internet** que se confirman desde la app.
+- **Cuentas y permisos:** usuario y contraseña para cada persona, con roles de dueño, encargado y vendedor, y permisos que elige el dueño.
 - **Tutorial** la primera vez y un botón **?** en cada pantalla que explica cómo usarla.
 - **Extensiones:** cada tienda activa solo lo que usa, en Más > Extensiones. Al quitar una, sus datos no se borran.
   - Inventario: conteo por sectores, recibir mercadería, **stock bajo y lista de compras** (pedido por WhatsApp a cada proveedor), **vencimientos**, **proveedores** (días de visita, deuda, productos asignados en lote y ganancia por producto) y **venta a granel** (por kilo o gramos).
@@ -56,7 +57,7 @@ Dispositivo A ─┐   POST /api/sync: envía su bandeja y recibe lo nuevo     �
 - La bandeja de salida solo se vacía cuando el servidor confirma que guardó los cambios.
 - El servidor también devuelve su hora: el dispositivo corrige su reloj si está desfasado.
 - Un dispositivo nuevo se une con un link de invitación (`?unirse=<código>&servidor=<dirección>`) y descarga todo.
-- Por ahora el código de la tienda (un UUID) es la llave de acceso. Las cuentas llegan en la Fase 4.
+- Sin cuentas, el código de la tienda (un UUID) es la llave de acceso. Con cuentas, además se necesita un usuario de la tienda.
 
 ## Página de la tienda y reservas por internet (Fase 3)
 
@@ -65,6 +66,14 @@ Dispositivo A ─┐   POST /api/sync: envía su bandeja y recibe lo nuevo     �
 - Una reserva (`POST /api/publico/<pid>/reserva`) entra a la tabla `cambios` como si viniera de un dispositivo más, así que llega sola a la app. El cliente consulta su estado con un código que solo tiene él.
 - Contra abusos: campo trampa para robots, tiempo mínimo en la página, celular chileno obligatorio, hasta 3 reservas por celular al día, máximo diario por tienda, límite por IP y números bloqueados.
 - Por internet (Tailscale Funnel o Cloudflare) solo responden la app, la página, las reservas y la sincronización; el panel de PocketBase queda para el wifi.
+
+## Cuentas y permisos (Fase 4)
+
+- Son opcionales: el dueño las activa en Más > Cuentas y permisos. Desde ahí, cada dispositivo entra con usuario y contraseña (colección `usuarios` de PocketBase, sesión de 30 días que se renueva sola) y el código de la tienda ya no basta para sincronizar.
+- La colección `miembros` dice quién pertenece a qué tienda, con qué rol (dueño, encargado o vendedor) y qué permisos extra tiene un vendedor: precios, costos, inventario, reportes y ajustes.
+- `/api/sync` revisa cada cambio contra los permisos de quien lo manda. Un cambio sin permiso no se guarda y el servidor vuelve a mandar lo que había, para que ese dispositivo quede igual que los demás.
+- Funciona sin internet como antes: la sesión queda guardada en el dispositivo.
+- La app esconde lo que cada persona no puede usar. Los costos se ocultan en pantalla, pero llegan al dispositivo con el resto de los datos.
 
 Cómo prenderlo: [servidor/INSTRUCCIONES.md](servidor/INSTRUCCIONES.md).
 
@@ -80,6 +89,7 @@ Cómo prenderlo: [servidor/INSTRUCCIONES.md](servidor/INSTRUCCIONES.md).
 | `sync.js` | Envía y recibe cambios con el servidor, y escucha los avisos en tiempo real |
 | `servidor/pb_migrations/` | Crea la tabla `cambios` en PocketBase y activa el respaldo diario |
 | `servidor/pb_hooks/sync.pb.js` | El punto de sincronización `/api/sync` |
+| `servidor/pb_hooks/cuentas.pb.js` | Cuentas, entrar, y quién tiene acceso a cada tienda |
 | `servidor/pb_hooks/publico.pb.js` | Página pública, reservas y lo que se puede abrir desde internet |
 | `servidor/iniciar.bat`, `iniciar.sh` | Prenden el servidor con un doble clic |
 | `sw.js` | Guarda la app en el dispositivo para que abra sin internet |
