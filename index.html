@@ -750,12 +750,13 @@ const ICONS = {
   caja:'<svg viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="11" rx="2"/><circle cx="12" cy="12.5" r="2.5"/><path d="M6 10v5M18 10v5"/></svg>',
   ofertas:'<svg viewBox="0 0 24 24"><path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="8.5" r="1.4"/></svg>',
   personas:'<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c0-3.9 3.1-7 7-7s7 3.1 7 7"/></svg>',
-  encargos:'<svg viewBox="0 0 24 24"><path d="M4 8l8-4 8 4v8l-8 4-8-4z"/><path d="M4 8l8 4 8-4M12 12v8M8 6l8 4"/></svg>'
+  encargos:'<svg viewBox="0 0 24 24"><path d="M4 8l8-4 8 4v8l-8 4-8-4z"/><path d="M4 8l8 4 8-4M12 12v8M8 6l8 4"/></svg>',
+  pagina:'<svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM21 14v.01M14 21h.01M17.5 21H21v-3.5"/></svg>'
 };
 const LABELS = { inicio:"Inicio", vender:"Vender", contar:"Contar", productos:"Productos", fiados:"Fiados", mas:"Más" };
-const IN_MAS = ["mas","recibir","historial","resumen","reservas","tipospan","datos","extensiones","apariencia","compras","vencimientos","proveedores","caja","ofertas","personas","encargos"];
+const IN_MAS = ["mas","recibir","historial","resumen","reservas","tipospan","datos","extensiones","apariencia","compras","vencimientos","proveedores","caja","ofertas","personas","encargos","pagina"];
 // Pantallas que dependen de una extensión
-const VIEW_EXT = { contar:"contar", fiados:"fiados", recibir:"recibir", reservas:"pan", tipospan:"pan", compras:"compras", vencimientos:"vencimientos", proveedores:"proveedores",
+const VIEW_EXT = { contar:"contar", fiados:"fiados", recibir:"recibir", reservas:["pan","pagina"], tipospan:"pan", pagina:"pagina", compras:"compras", vencimientos:"vencimientos", proveedores:"proveedores",
   caja:"caja", ofertas:"ofertas", personas:"personas", encargos:"encargos" };
 function renderTabs(){
   const tabs = Object.keys(LABELS).filter(k => !VIEW_EXT[k] || ext(VIEW_EXT[k]));
@@ -797,7 +798,7 @@ function viewInicio(){
   const week = {}; S.movs.filter(m => m.type==="venta" && m.at > Date.now()-7*D).forEach(m => week[m.pid] = (week[m.pid]||0) + m.qty);
   const top = Object.entries(week).filter(([id]) => P(id)).sort((a,b)=>b[1]-a[1]).slice(0,5);
   const sectorState = sectores().filter(c => avail.some(p => p.cat === c)).map(c => { const ps = avail.filter(p => p.cat===c); const done = ps.length && ps.every(p => p.countAt!=null); return `<span class="pill ${done?"ok":"none"}">${done?"✓ ":""}${esc(c)}</span>`; }).join(" ");
-  const resPend = S.reservas.filter(r => !r.done && r.at >= resCutoff());
+  const resPend = S.reservas.filter(r => !r.done && r.estado !== "rechazada" && resDia(r) === ymd()), resWeb = webNuevas();
   const pct0 = avail.length ? pct : 0;
   return `${header(S.ajustes.tienda_nombre || "Mi Almacén", meta.demo ? "Datos de ejemplo" : "Inventario y ventas")}
   <div class="stack">
@@ -805,7 +806,7 @@ function viewInicio(){
     ${meta.demo ? `<div class="demo-banner"><span>Estás probando con datos ficticios de ejemplo.</span><button class="btn sm" id="reset">Empezar mi tienda</button></div>` : ""}
     ${!avail.length ? `<div class="card stack"><h3>Primer paso: agrega tus productos</h3><p class="small muted" style="margin:0">Agrégalos uno por uno o escaneando su código de barras. Después cuenta un sector para que el sistema sepa cuánto tienes.</p><button class="btn primary block" data-go="productos">Agregar productos</button></div>` : ""}
     ${ext("pan") ? `<button class="panbtn" id="panbtn">${ICONS.pan}<span><b>Avisar que llegó el pan</b><small>Envía el mensaje al grupo de WhatsApp de clientes</small></span></button>` : ""}
-    ${ext("pan") && resPend.length ? `<button class="sector" data-go="reservas"><span class="name">Reservas de pan de hoy</span><span class="pill warn">${resPend.length} por entregar</span><span class="sub">Toca para ver quién reservó y marcar lo entregado</span></button>` : ""}
+    ${extOn(["pan","pagina"]) && (resPend.length || resWeb.length) ? `<button class="sector" data-go="reservas"><span class="name">${resWeb.length ? "Reservas nuevas por internet" : "Reservas de hoy"}</span><span class="pill warn">${resWeb.length ? resWeb.length + (resWeb.length === 1 ? " nueva" : " nuevas") : resPend.length + " por entregar"}</span><span class="sub">Toca para ver quién reservó y marcar lo entregado</span></button>` : ""}
     ${avisosInicio()}
     <div class="kpis">
       ${ext("contar") ? `<div class="card kpi"><div class="num">${pct0}%</div><div class="lbl">del inventario contado</div><div class="bar"><i style="width:${pct0}%"></i></div></div>`
@@ -1175,19 +1176,27 @@ function openPan(){
 const panesReserva = () => S.products.filter(p => p.cat === "Pan" && disp(p) && p.reserva !== false).sort((a, b) => a.name.localeCompare(b.name, "es"));
 function resCutoff(){ const d = new Date(); d.setHours(RES_CUT_HOUR,0,0,0); if (d.getTime() > Date.now()) d.setDate(d.getDate()-1); return d.getTime(); }
 // Las reservas viejas se sacan de la vista y de este dispositivo (sin enviarlo como cambio)
-function purgeReservas(){ const cut = resCutoff(), old = S.reservas.filter(r => !r.at || r.at < cut); if (!old.length) return;
-  S.reservas = S.reservas.filter(r => r.at && r.at >= cut); LocalDB.apply(old.map(r => ({ store:"reservas", del:r.id, local:true }))).catch(() => {}); }
+// Las reservas para otro día (las de internet) se guardan hasta ese día
+const resVigente = (r, cut = resCutoff()) => r.para ? r.para >= ymd() : r.at >= cut;
+const resDia = r => r.para || ymd(r.at);
+const webNuevas = () => S.reservas.filter(r => r.origen === "web" && r.estado === "nueva" && !r.done);
+function purgeReservas(){ const cut = resCutoff(), old = S.reservas.filter(r => !r.at || !resVigente(r, cut)); if (!old.length) return;
+  S.reservas = S.reservas.filter(r => r.at && resVigente(r, cut)); LocalDB.apply(old.map(r => ({ store:"reservas", del:r.id, local:true }))).catch(() => {}); }
 const resDetail = q => panesReserva().filter(p => q[p.id] > 0).map(p => `${fq(p, q[p.id])} ${p.name.toLowerCase()}`).join(", ");
+const RES_ESTADO = { nueva:["warn","Nueva"], confirmada:["ok","Confirmada"], rechazada:["bad","Rechazada"] };
+function resPill(r){ if (r.done) return `<span class="pill ok">Entregado</span>`; const e = r.origen === "web" && RES_ESTADO[r.estado]; return e ? `<span class="pill ${e[0]}">${e[1]}</span>` : `<span class="pill warn">Pendiente</span>`; }
 function viewReservas(){
-  const rs = S.reservas.slice().sort((a,b) => (a.at||0) - (b.at||0));
+  const rs = S.reservas.slice().sort((a,b) => resDia(a).localeCompare(resDia(b)) || (a.at||0) - (b.at||0));
   const q = ui.resQty || (ui.resQty = {});
-  const pend = rs.filter(r => !r.done).length;
+  const pend = rs.filter(r => !r.done && r.estado !== "rechazada").length, nuevas = webNuevas().length;
+  const dias = [...new Set(rs.map(resDia))];
+  const fila = r => `<button class="item tap" data-res="${r.id}"><div class="main"><div class="name">${esc(r.name)}${r.origen === "web" ? ` <span class="small muted">· por internet</span>` : ""}</div><div class="sub">${esc(r.detail)}${r.hora ? " · " + esc(r.hora) : ""}${r.at ? " · reservó " + ago(r.at) : ""}</div></div>${resPill(r)}</button>`;
   return `<header class="top"><button class="btn sm" data-back>← Regresar</button>${netPill()}</header>
   <div class="stack">
-    <div><h2>Reservas de pan de hoy</h2><p class="small muted" style="margin:4px 0 0">${pend} por entregar. Toca una reserva para marcarla como entregada. La lista se borra sola cada noche a las ${RES_CUT_HOUR}:00.</p></div>
-    <div class="card" style="padding-block:0"><div class="list">${rs.length ? "" : `<div class="empty">Todavía no hay reservas hoy.</div>`}${rs.map(r => `<button class="item tap" data-res="${r.id}"><div class="main"><div class="name">${esc(r.name)}</div><div class="sub">${esc(r.detail)}${r.at ? " · reservó " + ago(r.at) : ""}</div></div>
-      ${r.done ? `<span class="pill ok">Entregado</span>` : `<span class="pill warn">Pendiente</span>`}</button>`).join("")}</div></div>
-    <div class="card stack">
+    <div><h2>${ext("pan") && !ext("pagina") ? "Reservas de pan" : "Reservas"}</h2><p class="small muted" style="margin:4px 0 0">${pend} por entregar${nuevas ? `, ${nuevas} por confirmar` : ""}. ${ext("pagina") ? "Toca una reserva por internet para confirmarla o rechazarla; las demás se marcan como entregadas con un toque." : "Toca una reserva para marcarla como entregada."} Las reservas se borran solas pasado su día.</p></div>
+    ${rs.length ? dias.map(d => `<div class="stack" style="gap:6px"><h3>Para ${esc(enDias(daysTo(d)))}${d === ymd() ? "" : " · " + esc(fdate(d))}</h3><div class="card" style="padding-block:0"><div class="list">${rs.filter(r => resDia(r) === d).map(fila).join("")}</div></div></div>`).join("")
+      : `<div class="card"><div class="empty">Todavía no hay reservas.</div></div>`}
+    ${ext("pan") ? `<div class="card stack">
       <h3>Anotar una reserva</h3>
       <p class="small muted" style="margin:0">Para cuando un cliente pide pan por teléfono o WhatsApp.</p>
       <div class="field"><label for="rn">Nombre del cliente</label><input class="input" id="rn" placeholder="Ej: Ana Torres"></div>
@@ -1195,9 +1204,172 @@ function viewReservas(){
         <div class="list">${panesReserva().map(p => `<div class="item"><div class="main"><div class="name">${esc(p.name)}</div><div class="sub">${p.kg ? "por kilo, de a ½" : "por unidad"}</div></div>
           <div class="stepper"><button data-bdec="${p.id}" aria-label="Quitar ${esc(p.name)}">−</button><span style="min-width:3.5ch">${p.kg ? fq(p, q[p.id] || 0) : q[p.id] || 0}</span><button data-binc="${p.id}" aria-label="Agregar ${esc(p.name)}">+</button></div></div>`).join("") || `<div class="empty">No hay panes para reservar. Agrégalos en Más &gt; Tipos de pan.</div>`}</div></div>
       <button class="btn accent block" id="rsave" ${Object.values(q).some(n => n > 0) ? "" : "disabled"}>Anotar reserva${Object.values(q).some(n => n > 0) ? " (" + resDetail(q) + ")" : ""}</button>
-      <p class="small muted" style="margin:0">Más adelante los clientes podrán reservar solos desde un link que se comparte en el grupo de WhatsApp.</p>
-    </div>
+      <p class="small muted" style="margin:0">${ext("pagina") ? "Los clientes también pueden reservar solos desde la página de la tienda." : "Con la extensión Página de la tienda, los clientes pueden reservar solos desde un link o un código QR."}</p>
+    </div>` : ""}
   </div>`;
+}
+// Una reserva hecha desde la página de la tienda: confirmar, rechazar, avisar y bloquear
+function openReservaWeb(r){
+  const tienda = S.ajustes.tienda_nombre || "la tienda", dia = enDias(daysTo(resDia(r)));
+  const msg = r.estado === "rechazada" ? `Hola ${r.name}, te escribimos de ${tienda}. Lo sentimos, no podemos atender tu reserva de ${r.detail} para ${dia}.`
+    : `Hola ${r.name}, te escribimos de ${tienda}. Tu reserva de ${r.detail} para ${dia}${r.hora ? " (" + r.hora + ")" : ""} está confirmada. ¡Te esperamos!`;
+  const bloqueado = (pub().bloqueados || []).includes(r.tel);
+  openModal(`<div class="stack">
+    <div class="spread"><h2>${esc(r.name)}</h2><button class="btn ghost sm" data-close>Cerrar</button></div>
+    <div class="row">${resPill(r)}<span class="small muted">Por internet · reservó ${esc(ago(r.at))}</span></div>
+    <div class="card stack" style="gap:6px"><div style="font-weight:600">${esc(r.detail)}</div>
+      <div class="small muted">Para ${esc(dia)}${resDia(r) === ymd() ? "" : " · " + esc(fdate(resDia(r)))}${r.hora ? " · " + esc(r.hora) : ""}</div>
+      ${r.nota ? `<div class="small">“${esc(r.nota)}”</div>` : ""}
+      <div class="small muted">Celular: +${esc(r.tel)}</div></div>
+    ${r.done ? `<button class="btn block" id="rwundo">Marcar como no entregada</button>`
+      : r.estado === "nueva" ? `<div class="grid2"><button class="btn primary" id="rwok">Confirmar</button><button class="btn" id="rwno" style="color:var(--bad)">Rechazar</button></div>`
+      : `${r.estado === "confirmada" ? `<button class="btn primary block" id="rwdone">Marcar como entregada</button>` : ""}
+         <a class="btn block" style="text-align:center" href="${esc(waLink(r.tel, msg))}" ${WA_TARGET}>Avisarle por WhatsApp</a>${waWebNote("rwweb", r.tel, msg)}`}
+    ${bloqueado ? `<button class="btn ghost block" id="rwunblock">Desbloquear este número</button>` : `<button class="btn ghost block" id="rwblock">Bloquear este número</button>`}
+    <p class="small muted" style="margin:0">Un número bloqueado ya no puede reservar desde la página. Úsalo si alguien reserva y no viene, o manda reservas falsas.</p>
+  </div>`);
+  const set = cambios => run(async () => { await act.put("reservas", [Object.assign({}, r, cambios)]); render(); openReservaWeb(S.reservas.find(x => x.id === r.id)); });
+  const b = id => $(id) || {};
+  b("#rwok").onclick = () => set({ estado:"confirmada" });
+  b("#rwno").onclick = () => set({ estado:"rechazada" });
+  b("#rwdone").onclick = () => run(async () => { await act.reserva(r, true); closeModal(); render(); toast(`Reserva de ${r.name} entregada`); });
+  b("#rwundo").onclick = () => set({ done:false });
+  b("#rwblock").onclick = () => run(async () => { await setPub({ bloqueados:[...(pub().bloqueados || []), r.tel] }); if (r.estado === "nueva") await act.put("reservas", [Object.assign({}, r, { estado:"rechazada" })]);
+    toast("Número bloqueado"); render(); openReservaWeb(S.reservas.find(x => x.id === r.id)); });
+  b("#rwunblock").onclick = () => run(async () => { await setPub({ bloqueados:(pub().bloqueados || []).filter(t => t !== r.tel) }); toast("Número desbloqueado"); openReservaWeb(r); });
+}
+
+// ---------- Página de la tienda ----------
+// ajustes.publico: { pid, activo, url, mostrar:"todo"|"pan", stock, reservas, reservar:"pan"|"todo", diasMax, maxDia,
+//   mensaje, direccion, horario, whatsapp, bloqueados }. El pid es distinto al código de la tienda: el link público
+// nunca da acceso a los datos. Cualquier dispositivo conectado al servidor publica la vitrina cuando algo cambia.
+const pub = () => S.ajustes.publico || {};
+const nuevoPid = () => Array.from(crypto.getRandomValues(new Uint8Array(12)), b => "abcdefghijkmnpqrstuvwxyz23456789"[b % 32]).join("");
+async function setPub(cambios){ await act.setting("publico", Object.assign({}, pub(), cambios)); vit.last = ""; vitrinaSoon(300); }
+const esHttps = u => /^https:\/\//.test(u || "");
+// Dirección que abren los clientes: la de internet si está anotada, o la de este servidor
+const pubBase = () => (pub().url || (location.protocol === "https:" && sameOrigin ? location.origin : "") || meta.servidor || "").replace(/\/+$/, "");
+const pubLink = () => pubBase() && pub().pid ? `${pubBase()}/tienda.html?t=${pub().pid}` : "";
+const telCL = t => { let d = String(t || "").replace(/\D/g, ""); if (d.length === 9 && d[0] === "9") d = "56" + d; if (d.length === 8) d = "569" + d; return /^569\d{8}$/.test(d) ? d : ""; };
+function vitrina(){
+  const o = pub(), pan = new Set(panesReserva().map(p => p.id));
+  const reservable = p => !!o.reservas && (o.reservar === "todo" || pan.has(p.id));
+  const estado = p => { const s = stockOf(p); return s == null ? undefined : s <= 0 ? "no" : s <= p.min ? "poco" : "hay"; };
+  const productos = S.products.filter(p => disp(p) && (o.mostrar !== "pan" || p.cat === "Pan") && (p.price > 0 || reservable(p)))
+    .sort((a, b) => sectores().indexOf(a.cat) - sectores().indexOf(b.cat) || a.name.localeCompare(b.name, "es"))
+    .map(p => Object.assign({ id:p.id, n:p.name, c:p.cat, p:p.price }, p.kg ? { kg:1 } : {}, reservable(p) ? { r:1 } : {}, o.stock ? { s:estado(p) } : {}));
+  return { data:{ v:1, nombre:S.ajustes.tienda_nombre || "", mensaje:o.mensaje || "", direccion:o.direccion || "", horario:o.horario || "", whatsapp:telCL(o.whatsapp),
+      color:getComputedStyle(document.documentElement).getPropertyValue("--brand").trim(), reservas:!!o.reservas, stock:!!o.stock, diasMax:o.diasMax ?? 1, productos },
+    privado:{ bloqueados:o.bloqueados || [], maxDia:o.maxDia || 40 }, activo:ext("pagina") && !!o.activo };
+}
+const vit = { last:"", timer:null, due:0, at:0, error:"" };
+const vitEstado = () => !meta.servidor ? "" : vit.error ? `No se pudo publicar: ${vit.error}. Se reintenta solo.` : vit.at ? `✓ Publicada ${ago(vit.at)}` : pub().activo ? "Publicando…" : "";
+function vitrinaSoon(ms = 6000){
+  if (!S || meta.demo || !meta.servidor || !pub().pid) return;
+  // Si ya hay una publicación pendiente que sale antes, se deja esa
+  if (vit.timer && vit.due <= Date.now() + ms) return;
+  clearTimeout(vit.timer); vit.due = Date.now() + ms; vit.timer = setTimeout(() => { vit.timer = null; publicar(); }, ms);
+}
+async function publicar(){
+  // Solo publica un dispositivo al día con el servidor, para no subir una vitrina vieja
+  if (Sync.state.status !== "ok"){ vitrinaSoon(Sync.state.status === "syncing" ? 1500 : 15e3); return; }
+  const v = vitrina(), key = JSON.stringify(v);
+  if (key === vit.last) return;
+  try {
+    const r = await fetch(meta.servidor.replace(/\/+$/, "") + "/api/publico/publicar", { method:"POST", headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify({ tienda:meta.tienda.id, pid:pub().pid, activo:v.activo, data:Object.assign({ publicado:Date.now() }, v.data), privado:v.privado }) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.message || `El servidor respondió ${r.status}`);
+    vit.last = key; vit.at = Date.now(); vit.error = "";
+  } catch(e){ vit.error = e.message || "Sin conexión con el servidor"; vitrinaSoon(60e3); }
+  const el = $("#pgest"); if (el) el.textContent = vitEstado();
+}
+// Aviso cuando llega una reserva nueva por internet
+let resVistas = null;
+function avisarReservas(){
+  const ids = webNuevas().map(r => r.id);
+  if (!resVistas){ resVistas = new Set(ids); return; }
+  const nuevas = webNuevas().filter(r => !resVistas.has(r.id)); ids.forEach(id => resVistas.add(id));
+  if (!nuevas.length || !ext("pagina")) return;
+  toast(nuevas.length === 1 ? `Nueva reserva por internet: ${nuevas[0].name}` : `${nuevas.length} reservas nuevas por internet`);
+  try { navigator.vibrate?.(200); const ac = new (window.AudioContext || window.webkitAudioContext)(), o = ac.createOscillator(), g = ac.createGain();
+    o.frequency.value = 880; g.gain.value = 0.08; o.connect(g); g.connect(ac.destination); o.start(); o.stop(ac.currentTime + 0.18); } catch(e){}
+}
+// El generador de códigos QR (qr.js) se carga recién cuando se necesita
+let qrLib = null;
+const cargarQR = () => qrLib || (qrLib = new Promise((ok, no) => { if (window.qrcode) return ok(window.qrcode); const sc = document.createElement("script"); sc.src = "qr.js"; sc.onload = () => ok(window.qrcode); sc.onerror = () => { qrLib = null; no(new Error("No se pudo cargar el generador del código QR")); }; document.head.append(sc); }));
+async function qrSvg(texto, px = 4){ const q = (await cargarQR())(0, "M"); q.addData(texto); q.make(); return q.createSvgTag({ cellSize:px, margin:4, scalable:true }); }
+
+function viewPagina(){
+  const o = pub(), link = pubLink(), on = !!o.activo;
+  const estado = vitEstado();
+  const seg = (attr, val, opts) => `<div class="seg" role="group">${opts.map(([v, t]) => `<button ${attr}="${v}" aria-pressed="${String(val) === String(v)}">${t}</button>`).join("")}</div>`;
+  return `${header("Página de la tienda", "Precios y reservas para tus clientes")}
+  <div class="stack">
+    ${!meta.servidor ? `<div class="card stack"><p style="margin:0">Para tener página, la tienda necesita el servidor. Configúralo en <b>Tienda y datos</b> y vuelve aquí.</p><button class="btn block" data-go="datos">Ir a Tienda y datos</button></div>` : `
+    <div class="card stack">
+      <label class="ext" style="padding:0;border:0"><span class="name" style="font-weight:700">Página activa</span><span class="switch"><input type="checkbox" id="pgon" ${on ? "checked" : ""} aria-label="Página activa"><span></span></span>
+        <span class="sub">${on ? "Cualquiera con el link o el código QR ve tus productos y precios." : "Nadie puede verla. Actívala cuando quieras compartirla."}</span></label>
+      ${on && link ? `<div class="code" id="pglink">${esc(link)}</div>
+        <div class="grid2"><a class="btn" style="text-align:center" href="${esc(waLink("", (o.mensaje || "Mira nuestros productos y precios") + ": " + link))}" ${WA_TARGET}>Enviar por WhatsApp</a><button class="btn" id="pgcopy">Copiar link</button></div>
+        <a class="btn block" style="text-align:center" href="${esc(link)}" target="_blank" rel="noopener">Ver la página</a>
+        <div id="pgqr" style="background:#fff;border-radius:var(--r2);padding:12px;max-width:240px;margin:0 auto;width:100%;aspect-ratio:1"></div>
+        <div class="grid2"><button class="btn" id="pgqrdl">Descargar QR</button><button class="btn" id="pgprint">Imprimir cartel</button></div>
+        ${esHttps(link) ? "" : `<p class="pill warn" style="white-space:normal;margin:0;padding:8px 10px">Este link solo funciona en el wifi de la tienda. Para que tus clientes la abran desde su casa, conecta el servidor a internet (está explicado en servidor/INSTRUCCIONES.md) y anota abajo su dirección.</p>`}
+        <p class="small muted" style="margin:0" id="pgest">${esc(estado)}</p>` : ""}
+    </div>
+    <div class="card stack"><h3>Qué se muestra</h3>
+      <div class="field"><label>Productos</label>${seg("data-pgm", o.mostrar || "todo", [["todo","Todos los que tienen precio"],["pan","Solo el pan"]])}</div>
+      <label class="row small"><input type="checkbox" id="pgstock" ${o.stock ? "checked" : ""}> Mostrar si hay, quedan pocos o está agotado (solo los productos contados)</label>
+      <div class="field"><label for="pgmsg">Mensaje de bienvenida</label><input class="input" id="pgmsg" value="${esc(o.mensaje || "")}" maxlength="140" placeholder="Ej: Pan amasado calentito todos los días"></div>
+      <div class="field"><label for="pgdir">Dirección</label><input class="input" id="pgdir" value="${esc(o.direccion || "")}" maxlength="80" placeholder="Ej: Los Aromos 123, Quilpué"></div>
+      <div class="field"><label for="pghor">Horario</label><input class="input" id="pghor" value="${esc(o.horario || "")}" maxlength="80" placeholder="Ej: Lunes a sábado de 8:00 a 21:00"></div>
+      <div class="field"><label for="pgwa">WhatsApp de la tienda (opcional)</label><input class="input" id="pgwa" value="${esc(o.whatsapp || "")}" inputmode="tel" placeholder="9 XXXX XXXX"></div>
+      <button class="btn block" id="pgsave">Guardar</button>
+    </div>
+    <div class="card stack"><h3>Reservas por internet</h3>
+      <label class="row small"><input type="checkbox" id="pgres" ${o.reservas ? "checked" : ""}> Los clientes pueden reservar desde la página</label>
+      ${o.reservas ? `<div class="field"><label>Qué se puede reservar</label>${seg("data-pgr", o.reservar || "pan", [["pan","El pan marcado en Tipos de pan"],["todo","Cualquier producto"]])}</div>
+      <div class="field"><label>Con cuánta anticipación</label>${seg("data-pgd", o.diasMax ?? 1, [[0,"Solo hoy"],[1,"Hasta mañana"],[2,"Hasta 2 días"]])}</div>
+      <div class="field"><label for="pgmax">Máximo de reservas por día</label><input class="input" id="pgmax" type="number" min="1" inputmode="numeric" value="${o.maxDia || 40}"></div>
+      <p class="small muted" style="margin:0">Para evitar abusos: cada celular puede hacer hasta 3 reservas al día, se pide nombre y celular, y puedes bloquear números desde cada reserva.${(o.bloqueados || []).length ? ` Números bloqueados: ${(o.bloqueados || []).length}.` : ""}</p>` : ""}
+    </div>
+    <div class="card stack"><h3>Dirección en internet</h3>
+      <p class="small muted" style="margin:0">La dirección con candado (https) del servidor, por ejemplo la de Tailscale Funnel. Si la dejas vacía se usa la del servidor.</p>
+      <div class="searchbar"><input class="input code" id="pgurl" value="${esc(o.url || "")}" placeholder="https://mi-pc.tu-red.ts.net" autocapitalize="none" inputmode="url"><button class="btn" id="pgurls">Guardar</button></div>
+    </div>
+    ${o.pid ? `<button class="btn ghost block" id="pgnew">Cambiar el link (el anterior y su QR dejan de funcionar)</button>` : ""}`}
+  </div>`;
+}
+function bindPagina(app){
+  if (!meta.servidor) return;
+  const o = pub();
+  $("#pgon").onchange = e => run(async () => { await setPub(Object.assign({ activo:e.target.checked }, o.pid ? {} : { pid:nuevoPid(), reservas:ext("pan"), stock:false, diasMax:1 })); render(); });
+  app.querySelectorAll("[data-pgm]").forEach(b => b.onclick = () => run(async () => { await setPub({ mostrar:b.dataset.pgm }); render(); }));
+  app.querySelectorAll("[data-pgr]").forEach(b => b.onclick = () => run(async () => { await setPub({ reservar:b.dataset.pgr }); render(); }));
+  app.querySelectorAll("[data-pgd]").forEach(b => b.onclick = () => run(async () => { await setPub({ diasMax:+b.dataset.pgd }); render(); }));
+  $("#pgstock").onchange = e => run(async () => { await setPub({ stock:e.target.checked }); });
+  $("#pgres").onchange = e => run(async () => { await setPub({ reservas:e.target.checked }); render(); });
+  const mx = $("#pgmax"); if (mx) mx.onchange = () => run(async () => { await setPub({ maxDia:Math.max(1, Math.round(+mx.value || 40)) }); toast("Guardado"); });
+  $("#pgsave").onclick = () => run(async () => { const wa = $("#pgwa").value.trim(); if (wa && !telCL(wa)){ $("#pgwa").focus(); return toast("Revisa el número de WhatsApp"); }
+    await setPub({ mensaje:$("#pgmsg").value.trim(), direccion:$("#pgdir").value.trim(), horario:$("#pghor").value.trim(), whatsapp:wa }); toast("Guardado"); render(); });
+  $("#pgurls").onclick = () => run(async () => { const u = $("#pgurl").value.trim().replace(/\/+$/, "");
+    if (u && !/^https?:\/\/[^\s/]+$/.test(u)){ $("#pgurl").focus(); return toast("Escribe solo la dirección, por ejemplo https://mi-pc.tu-red.ts.net"); }
+    await setPub({ url:u }); toast("Dirección guardada"); render(); });
+  const nw = $("#pgnew"); if (nw) nw.onclick = () => { openModal(`<div class="stack"><h2>¿Cambiar el link?</h2><p style="margin:0">El link y el código QR que ya compartiste dejan de funcionar. Tendrás que imprimir y compartir los nuevos.</p>
+    <div class="grid2"><button class="btn" data-close>Cancelar</button><button class="btn primary" id="pgnewok">Cambiar</button></div></div>`);
+    $("#pgnewok").onclick = () => run(async () => { await setPub({ pid:nuevoPid() }); closeModal(); render(); toast("Link nuevo listo"); }); };
+  const link = pubLink(); if (!o.activo || !link) return;
+  const cp = $("#pgcopy"); if (cp) cp.onclick = () => { try { navigator.clipboard.writeText(link).then(() => toast("Link copiado"), () => toast("Selecciona y copia el link")); } catch(e){ toast("Selecciona y copia el link"); } };
+  qrSvg(link).then(svg => { const el = $("#pgqr"); if (el) el.innerHTML = svg.replace("<svg ", '<svg style="width:100%;height:100%;display:block" '); }, e => { const el = $("#pgqr"); if (el) el.textContent = e.message; });
+  $("#pgqrdl").onclick = () => run(async () => { const svg = await qrSvg(link, 10), img = new Image(), c = document.createElement("canvas");
+    await new Promise((ok, no) => { img.onload = ok; img.onerror = no; img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg); });
+    c.width = c.height = 1000; const g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, 1000, 1000); g.drawImage(img, 0, 0, 1000, 1000);
+    const a = document.createElement("a"); a.href = c.toDataURL("image/png"); a.download = `qr-${(S.ajustes.tienda_nombre || "tienda").toLowerCase().replace(/[^a-z0-9ñ]+/g, "-")}.png`; a.click(); toast("Código QR descargado"); });
+  $("#pgprint").onclick = () => run(async () => { const svg = await qrSvg(link, 10), w = window.open("", "_blank"); if (!w) return toast("Permite las ventanas emergentes para imprimir");
+    w.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>${esc(S.ajustes.tienda_nombre || "Tienda")}</title><style>body{font-family:system-ui,sans-serif;text-align:center;margin:40px;color:#111}h1{font-size:40px;margin:0 0 8px}p{font-size:22px;margin:8px 0}svg{width:70vmin;height:70vmin;margin:24px auto;display:block}small{font-size:14px;color:#555;word-break:break-all}</style></head>
+      <body><h1>${esc(S.ajustes.tienda_nombre || "")}</h1><p>${o.reservas ? "Escanea para ver precios y reservar" : "Escanea para ver nuestros productos y precios"}</p>${svg}<small>${esc(link)}</small><script>onload=()=>print()<\/script></body></html>`);
+    w.document.close(); });
 }
 
 // ---------- Utilidades de las extensiones ----------
@@ -1911,6 +2083,8 @@ const AYUDA = {
   encargos:["Anota pedidos para otro día con abono.", "Márcalo Listo y avísale al cliente por WhatsApp con un toque."],
   personas:["Agrega a quienes atienden y elige quién está en este dispositivo.", "Cada venta, recepción y conteo queda con su nombre."],
   historial:["Todo lo que entra, sale y se cuenta, del más nuevo al más viejo.", "Toca una venta para ver su comprobante (si está activado)."],
+  reservas:["Las reservas de internet llegan solas y suenan. Tócalas para confirmarlas o rechazarlas y avisarle al cliente por WhatsApp.", "Las demás se marcan como entregadas con un toque.", "Si alguien reserva y no viene, bloquea su número desde la reserva."],
+  pagina:["Activa la página y comparte el link por WhatsApp o imprime el cartel con el código QR.", "Muestra los productos con precio. Lo que apagues o no tenga precio no aparece.", "Los clientes reservan con su nombre y celular, y ven cuando la confirmas.", "Para que la abran desde su casa, el servidor tiene que estar conectado a internet con candado (https)."],
   tipospan:["Elige para cada pan si se vende por unidad o por kilo, su precio, si tiene botón rápido y si se puede reservar."]
 };
 function openAyuda(v){
@@ -1939,6 +2113,7 @@ const EXTENSIONES = [
   { id:"personas", grupo:"Ventas", def:false, nombre:"Quién atiende", desc:"Cada persona que atiende elige su nombre y queda registrado quién vendió, recibió o contó." },
   { id:"fiados", grupo:"Clientes", def:true, nombre:"Fiados", desc:"Cuaderno de cuentas por cliente, con pagos y recordatorio por WhatsApp." },
   { id:"pan", grupo:"Clientes", def:false, nombre:"Pan: aviso y reservas", desc:"Botón para avisar al grupo de WhatsApp que llegó el pan, y lista de reservas de pan." },
+  { id:"pagina", grupo:"Clientes", def:false, nombre:"Página de la tienda", desc:"Una página con tus productos y precios para compartir con un código QR, donde los clientes pueden reservar. Necesita el servidor conectado a internet." },
   { id:"encargos", grupo:"Clientes", def:false, nombre:"Encargos y pedidos", desc:"Pedidos para otro día (tortas, gas, pedidos especiales) con abono y aviso por WhatsApp cuando están listos." }
 ];
 const GRUPOS_EXT = ["Inventario","Ventas","Clientes"];
@@ -1948,6 +2123,8 @@ const extSwitches = (attr, on) => GRUPOS_EXT.map(g => `<h3 class="ext-g">${g}</h
   <span class="sub">${esc(e.desc)}</span></label>`).join("")}`).join("");
 // Las tiendas creadas antes de las extensiones tienen todo activado
 const ext = id => (S?.ajustes?.extensiones || {})[id] !== false;
+// Una pantalla que sirve a varias extensiones se muestra si cualquiera está activa
+const extOn = x => [].concat(x).some(ext);
 
 function viewExtensiones(){
   return `<header class="top"><button class="btn sm" data-back>← Regresar</button>${netPill()}</header>
@@ -2108,7 +2285,7 @@ function syncCard(){
     <div class="field"><label for="sserv">Dirección del servidor</label><div class="searchbar"><input class="input code" id="sserv" value="${esc(meta.servidor)}" placeholder="Ej: http://192.168.1.20:8090" autocapitalize="none" inputmode="url"><button class="btn" id="ssave">Guardar</button></div></div>
     ${on ? `<button class="btn block" id="snow">Sincronizar ahora</button>
     <div class="field"><label>Sumar otro celular o computador</label>
-      <p class="small muted" style="margin:0">Abre este link en el otro dispositivo (tiene que estar en el mismo wifi mientras el servidor esté en tu computador):</p>
+      <p class="small muted" style="margin:0">Abre este link en el otro dispositivo ${/^https:/.test(meta.servidor) ? "" : "(tiene que estar en el mismo wifi mientras el servidor esté en tu computador)"}:</p>
       <div class="code">${esc(inviteLink())}</div></div>
     <div class="grid2"><a class="btn" style="text-align:center" href="${esc(waLink("", "Únete a " + (S.ajustes.tienda_nombre || "la tienda") + " en Mi Almacén: " + inviteLink()))}" ${WA_TARGET}>Enviar por WhatsApp</a><button class="btn" id="scopy">Copiar link</button></div>` : ""}
     <p class="small muted" style="margin:0">Código de la tienda: <span class="code">${esc(meta.tienda?.id || "")}</span>. No lo compartas con personas ajenas: por ahora es la llave para entrar a los datos.</p>
@@ -2158,7 +2335,7 @@ function confirmWipe(after){
 }
 
 function viewMas(){
-  const pend = S.reservas.filter(r => !r.done).length;
+  const pend = S.reservas.filter(r => !r.done && r.estado !== "rechazada").length;
   const opt = (go, icon, title, sub) => `<button class="sector" data-go="${go}"><span class="name" style="display:flex;gap:10px;align-items:center"><span style="width:22px;height:22px;display:inline-flex" class="mi">${ICONS[icon]}</span>${title}</span><span></span><span class="sub">${sub}</span></button>`;
   const sec = (t, items) => { const h = items.filter(Boolean).join(""); return h ? `<h3 style="margin-top:8px">${t}</h3>${h}` : ""; };
   return `${header("Más", "Otras herramientas")}
@@ -2175,7 +2352,8 @@ function viewMas(){
     ${sec("Clientes y pan", [
       ext("encargos") && opt("encargos","encargos","Encargos", `${S.encargos.filter(e => e.estado !== "entregado").length} por entregar`),
       ext("pan") && `<button class="sector" id="panbtn"><span class="name" style="display:flex;gap:10px;align-items:center"><span style="width:22px;height:22px;display:inline-flex" class="mi">${ICONS.pan}</span>Avisar que llegó el pan</span><span></span><span class="sub">Mensaje al grupo de WhatsApp de clientes</span></button>`,
-      ext("pan") && opt("reservas","reservas","Reservas de pan", pend + " pendientes hoy"),
+      extOn(["pan","pagina"]) && opt("reservas","reservas", ext("pan") ? "Reservas de pan" : "Reservas", `${pend} por entregar${webNuevas().length ? ` · ${webNuevas().length} nuevas por internet` : ""}`),
+      ext("pagina") && opt("pagina","pagina","Página de la tienda", pub().activo ? "Activa · link, código QR y reservas" : "Link y código QR para tus clientes"),
       ext("pan") && opt("tipospan","pan","Tipos de pan", "Precios, por unidad o por kilo, botones rápidos y reservas")])}
     ${sec("Configuración", [
       ext("personas") && opt("personas","personas","Quién atiende", quien() ? "Ahora atiende " + esc(nombrePersona(quien())) : "Elige quién atiende en este dispositivo"),
@@ -2196,14 +2374,15 @@ function bindSearch(onPick, qs = "#q", rs = "#res", opts){
 function render(){
   if (!MODE) return;
   purgeReservas();
-  if (VIEW_EXT[ui.view] && !ext(VIEW_EXT[ui.view])) ui.view = "inicio";
+  if (VIEW_EXT[ui.view] && !extOn(VIEW_EXT[ui.view])) ui.view = "inicio";
   applyTheme();
   renderTabs();
   const v = ui.view, app = $("#app");
   app.innerHTML = ({ inicio:viewInicio, vender:viewVender, recibir:viewRecibir, contar:viewContar, productos:viewProductos, historial:viewHistorial, fiados:viewFiados, mas:viewMas,
     reservas:viewReservas, datos:viewDatos, extensiones:viewExtensiones, apariencia:viewApariencia, compras:viewCompras, vencimientos:viewVencimientos,
-    proveedores:viewProveedores, caja:viewCaja, tipospan:viewTiposPan, resumen:viewResumen, ofertas:viewOfertas, personas:viewPersonas, encargos:viewEncargos })[v]();
-  ({ resumen:bindResumen, tipospan:bindTiposPan, compras:bindCompras, vencimientos:bindVencimientos, proveedores:bindProveedores, caja:bindCaja, ofertas:bindOfertas, personas:bindPersonas, encargos:bindEncargos })[v]?.(app);
+    proveedores:viewProveedores, caja:viewCaja, tipospan:viewTiposPan, resumen:viewResumen, ofertas:viewOfertas, personas:viewPersonas, encargos:viewEncargos, pagina:viewPagina })[v]();
+  ({ resumen:bindResumen, tipospan:bindTiposPan, compras:bindCompras, vencimientos:bindVencimientos, proveedores:bindProveedores, caja:bindCaja, ofertas:bindOfertas, personas:bindPersonas, encargos:bindEncargos, pagina:bindPagina })[v]?.(app);
+  vitrinaSoon();
   app.querySelectorAll("[data-go]").forEach(b => b.onclick = () => go(b.dataset.go));
   app.querySelectorAll("[data-back]").forEach(b => b.onclick = back);
   const pb = $("#panbtn"); if (pb) pb.onclick = openPan;
@@ -2255,14 +2434,14 @@ function render(){
     if (persisted === null && navigator.storage?.persisted) navigator.storage.persisted().then(x => { persisted = x; if (ui.view === "datos") render(); }, () => {});
   }
   if (v === "reservas"){
-    app.querySelectorAll("[data-res]").forEach(b => b.onclick = () => run(async () => { const r = S.reservas.find(r => r.id === b.dataset.res); await act.reserva(r, !r.done); render(); }));
-    const rn = $("#rn"); rn.value = ui.resName || ""; rn.oninput = () => ui.resName = rn.value;
+    app.querySelectorAll("[data-res]").forEach(b => b.onclick = () => run(async () => { const r = S.reservas.find(r => r.id === b.dataset.res); if (r.origen === "web") return openReservaWeb(r); await act.reserva(r, !r.done); render(); }));
+    const rn = $("#rn"); if (rn){ rn.value = ui.resName || ""; rn.oninput = () => ui.resName = rn.value;
     const step = (id, d) => { if (P(id)?.kg) d /= 2; ui.resQty[id] = Math.max(0, (ui.resQty[id]||0) + d); const y = window.scrollY; render(); window.scrollTo(0, y); };
     app.querySelectorAll("[data-binc]").forEach(x => x.onclick = () => step(x.dataset.binc, 1));
     app.querySelectorAll("[data-bdec]").forEach(x => x.onclick = () => step(x.dataset.bdec, -1));
     $("#rsave").onclick = () => run(async () => { const name = rn.value.trim(); if (!name){ rn.focus(); toast("Escribe el nombre del cliente"); return; }
       const detail = resDetail(ui.resQty); if (!detail) return;
-      await act.newReserva(name, detail); ui.resQty = {}; ui.resName = ""; render(); toast(`Reserva de ${name} anotada`); });
+      await act.newReserva(name, detail); ui.resQty = {}; ui.resName = ""; render(); toast(`Reserva de ${name} anotada`); }); }
   }
   if (v === "inicio" && meta.demo){
     $("#reset").onclick = () => confirmWipe(showSetup);
@@ -2351,6 +2530,7 @@ const clearInvite = () => { if (invite) history.replaceState(null, "", location.
 async function openStore(){
   await loadLocal();
   if (!meta.tienda) return showSetup();
+  resVistas = null; avisarReservas();
   if (invite && invite.tienda !== meta.tienda.id) toast("Este dispositivo ya tiene otra tienda. Para unirte, primero borra sus datos en Más > Tienda y datos.");
   clearInvite();
   if (!meta.demo && !meta.servidor){ const o = await localServer(); if (o){ meta.servidor = o; await LocalDB.setMeta("servidor", o); } }
@@ -2358,7 +2538,7 @@ async function openStore(){
   if (!meta.demo && meta.servidor) Sync.start(meta.servidor, meta.tienda.id); else Sync.stop();
 }
 Sync.state.onStatus = () => { LocalDB.pendingCount().then(n => { meta.pending = n; if (MODE) updateNet(); }, () => {}); };
-Sync.state.onChange = async () => { await loadLocal(); if (MODE) softRender(); };
+Sync.state.onChange = async () => { await loadLocal(); avisarReservas(); if (MODE) softRender(); };
 
 function showSetup(){
   if (invite) return showJoin(invite.servidor, invite.tienda);

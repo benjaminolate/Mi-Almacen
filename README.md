@@ -17,6 +17,7 @@ Parte del código de [Inventario_almacen_VD](https://github.com/benjaminolate/In
 - **Instalable** como app (PWA), sin pasar por Play Store.
 - **Respaldo** en un archivo y restauración desde él, reemplazando todo o **agregando solo lo que falta**. El servidor además guarda una copia automática cada día.
 - **Resumen de ventas** de hoy, 7 días, este mes, mes pasado, este año y año pasado, con descarga a **Excel**.
+- **Página de la tienda** con link y código QR: productos, precios, si hay o no, y **reservas por internet** que se confirman desde la app.
 - **Tutorial** la primera vez y un botón **?** en cada pantalla que explica cómo usarla.
 - **Extensiones:** cada tienda activa solo lo que usa, en Más > Extensiones. Al quitar una, sus datos no se borran.
   - Inventario: conteo por sectores, recibir mercadería, **stock bajo y lista de compras** (pedido por WhatsApp a cada proveedor), **vencimientos**, **proveedores** (días de visita, deuda, productos asignados en lote y ganancia por producto) y **venta a granel** (por kilo o gramos).
@@ -57,6 +58,14 @@ Dispositivo A ─┐   POST /api/sync: envía su bandeja y recibe lo nuevo     �
 - Un dispositivo nuevo se une con un link de invitación (`?unirse=<código>&servidor=<dirección>`) y descarga todo.
 - Por ahora el código de la tienda (un UUID) es la llave de acceso. Las cuentas llegan en la Fase 4.
 
+## Página de la tienda y reservas por internet (Fase 3)
+
+- `tienda.html?t=<pid>` muestra los productos con precio de una tienda y deja reservar. El `pid` es un código aparte del de la tienda: el link público no da acceso a los datos.
+- La app publica la vitrina en `POST /api/publico/publicar` cuando algo cambia (tabla `vitrinas`). Los clientes la leen en `GET /api/publico/<pid>`.
+- Una reserva (`POST /api/publico/<pid>/reserva`) entra a la tabla `cambios` como si viniera de un dispositivo más, así que llega sola a la app. El cliente consulta su estado con un código que solo tiene él.
+- Contra abusos: campo trampa para robots, tiempo mínimo en la página, celular chileno obligatorio, hasta 3 reservas por celular al día, máximo diario por tienda, límite por IP y números bloqueados.
+- Por internet (Tailscale Funnel o Cloudflare) solo responden la app, la página, las reservas y la sincronización; el panel de PocketBase queda para el wifi.
+
 Cómo prenderlo: [servidor/INSTRUCCIONES.md](servidor/INSTRUCCIONES.md).
 
 ## Archivos
@@ -65,10 +74,13 @@ Cómo prenderlo: [servidor/INSTRUCCIONES.md](servidor/INSTRUCCIONES.md).
 |---|---|
 | `index.html` | Toda la app: estilos, pantallas y acciones |
 | `catalogos.js` | Productos típicos de cada tipo de negocio (sin precios) |
+| `tienda.html` | Página pública de la tienda, para los clientes |
+| `qr.js` | Generador de códigos QR (Kazuhiko Arase, licencia MIT) |
 | `local-db.js` | Base local (IndexedDB), bandeja de salida, reloj lógico y respaldos |
 | `sync.js` | Envía y recibe cambios con el servidor, y escucha los avisos en tiempo real |
 | `servidor/pb_migrations/` | Crea la tabla `cambios` en PocketBase y activa el respaldo diario |
 | `servidor/pb_hooks/sync.pb.js` | El punto de sincronización `/api/sync` |
+| `servidor/pb_hooks/publico.pb.js` | Página pública, reservas y lo que se puede abrir desde internet |
 | `servidor/iniciar.bat`, `iniciar.sh` | Prenden el servidor con un doble clic |
 | `sw.js` | Guarda la app en el dispositivo para que abra sin internet |
 | `manifest.webmanifest`, `icons/` | Lo que permite instalarla como app |

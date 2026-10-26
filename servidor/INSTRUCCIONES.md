@@ -31,7 +31,7 @@ Abre **http://localhost:8090** en el navegador.
 - Si ya tenías una tienda creada en esta dirección, se conecta sola al servidor.
 - Si no, crea la tienda. Arriba a la derecha tiene que decir **"Sincronizado"**.
 
-> La app de GitHub Pages (`benjaminolate.github.io/Mi-Almacen`) es otra dirección y tiene sus propios datos. Por ahora no puede conectarse al servidor de tu computador: el navegador bloquea que una página con candado (https) hable con una sin candado (http). Eso se resuelve en la Fase 3.
+> La app de GitHub Pages (`benjaminolate.github.io/Mi-Almacen`) es otra dirección y tiene sus propios datos. Solo puede conectarse al servidor cuando este tiene dirección con candado (https): ver el paso 7.
 
 ## 5. Sumar un celular
 
@@ -59,14 +59,43 @@ Para volver a una copia: entra a `http://localhost:8090/_/` con la cuenta de adm
 
 Aparte, desde la app (**Más → Tienda y datos**) puedes descargar un respaldo a tu teléfono. Al restaurarlo puedes elegir **Agregar lo que falta**, que no borra nada de lo que ya hay.
 
-## Lo que todavía no funciona en el celular (se arregla en la Fase 3)
+## 7. Conectar el servidor a internet (gratis, con candado)
 
-Como la dirección del wifi (`http://192.168...`) no tiene candado, en el celular:
+Sirve para tres cosas: que tus clientes abran la **página de la tienda** desde su casa, que los celulares de la tienda sincronicen **fuera del wifi**, y que en el celular funcionen la **cámara en vivo** y la **instalación** de la app (necesitan candado, https).
 
-- la **cámara en vivo** para escanear no abre; sí funcionan **"Sacar foto al código"** y escribir el número,
-- no se puede **instalar** la app ni abrirla sin conexión al servidor.
+Se usa **Tailscale Funnel**, que es gratis y le da a tu computador una dirección fija con candado, por ejemplo `https://mi-pc.tu-red.ts.net`. Tu computador tiene que estar prendido con el servidor abierto, como siempre.
 
-En el computador (`localhost`) todo funciona, incluso la cámara y la instalación.
+1. Crea una cuenta en [tailscale.com](https://tailscale.com) (puedes entrar con Google) e instala Tailscale en el computador del servidor.
+2. Abre "Símbolo del sistema" y escribe:
+
+   ```
+   tailscale funnel --bg 8090
+   ```
+
+   La primera vez te muestra un link para permitir Funnel en tu cuenta: ábrelo, acepta y vuelve a escribir el comando. Al final te muestra la dirección, algo como `https://mi-pc.tu-red.ts.net`. Queda guardado: no hay que repetirlo cada vez que prendes el computador.
+3. Abre esa dirección en el navegador: tiene que aparecer la app.
+4. En la app, en **Más → Tienda y datos → Sincronización**, cambia la **Dirección del servidor** por la nueva (`https://...ts.net`) y toca **Guardar**. Desde ahí, el link para sumar un celular sirve desde cualquier lugar.
+5. En **Más → Página de la tienda**, anota la misma dirección en **Dirección en internet**.
+
+Para apagarlo: `tailscale funnel --bg 8090 off`.
+
+> ¿Solo quieres probar sin crear una cuenta? Con [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/do-more-with-tunnels/trycloudflare/) y el comando `cloudflared tunnel --url http://localhost:8090` obtienes una dirección `https://...trycloudflare.com` al instante, pero cambia cada vez que lo abres, así que no sirve para un código QR impreso.
+
+### Qué queda abierto a internet
+
+Solo la app, la página de la tienda, las reservas y la sincronización. El panel de administración (`/_/`) y el resto del servidor responden únicamente en el wifi de la tienda. Los datos de una tienda solo los puede leer quien tenga su código (el link de invitación), así que no lo compartas fuera del equipo.
+
+## 8. La página de la tienda
+
+En la app, activa la extensión **Página de la tienda** (Más → Extensiones) y entra a **Más → Página de la tienda**:
+
+- Prende **Página activa**. Aparecen el link, el código QR, **Descargar QR** e **Imprimir cartel** para pegar en el mostrador.
+- Elige si muestra todos los productos con precio o solo el pan, y si muestra cuando algo está agotado.
+- Con **Reservas por internet**, los clientes reservan con su nombre y celular. La reserva llega sola a todos los dispositivos de la tienda (suena) y aparece en **Reservas**: ahí la confirmas o la rechazas y le avisas por WhatsApp. El cliente ve en la misma página si su reserva fue confirmada.
+- Para evitar abusos: cada celular puede hacer hasta 3 reservas al día, hay un máximo de reservas por día que eliges tú, y puedes bloquear un número desde cualquiera de sus reservas.
+- **Cambiar el link** hace que el anterior y su QR dejen de funcionar.
+
+La página muestra lo que la app publicó la última vez que estuvo conectada al servidor; si cambias un precio, se actualiza en unos segundos.
 
 ## Si algo falla
 
@@ -76,3 +105,5 @@ En el computador (`localhost`) todo funciona, incluso la cámara y la instalaci�
 | El celular no abre `http://192.168...:8090` | Revisa que esté en el mismo wifi, que la IP sea la correcta y que Windows haya dado permiso a PocketBase (Panel de control → Firewall de Windows → Permitir una aplicación → PocketBase → Privada). |
 | Arriba dice "Sin servidor" | La ventana del servidor está cerrada o el computador cambió de IP. Préndelo de nuevo; los cambios se envían solos. |
 | "El servidor no tiene datos de esa tienda" al unirse | El link se copió incompleto. Vuelve a enviarlo desde el computador. |
+| Los clientes ven "No se pudo conectar con la tienda" | El computador o el servidor están apagados, o Tailscale está cerrado. |
+| La dirección `https://...ts.net` no abre | Revisa que Tailscale esté conectado en el computador y vuelve a escribir `tailscale funnel --bg 8090`. |
