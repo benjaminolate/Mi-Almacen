@@ -1503,7 +1503,7 @@ function bindPagina(app){
   $("#pgqrdl").onclick = () => run(async () => { const svg = await qrSvg(link, 10), img = new Image(), c = document.createElement("canvas");
     await new Promise((ok, no) => { img.onload = ok; img.onerror = no; img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg); });
     c.width = c.height = 1000; const g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, 1000, 1000); g.drawImage(img, 0, 0, 1000, 1000);
-    const a = document.createElement("a"); a.href = c.toDataURL("image/png"); a.download = `qr-${(S.ajustes.tienda_nombre || "tienda").toLowerCase().replace(/[^a-z0-9ñ]+/g, "-")}.png`; a.click(); toast("Código QR descargado"); });
+    const a = document.createElement("a"); a.href = c.toDataURL("image/png"); a.download = `qr-${slug(S.ajustes.tienda_nombre)}.png`; a.click(); toast("Código QR descargado"); });
   $("#pgprint").onclick = () => run(async () => { const svg = await qrSvg(link, 10), w = window.open("", "_blank"); if (!w) return toast("Permite las ventanas emergentes para imprimir");
     w.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>${esc(S.ajustes.tienda_nombre || "Tienda")}</title><style>body{font-family:system-ui,sans-serif;text-align:center;margin:40px;color:#111}h1{font-size:40px;margin:0 0 8px}p{font-size:22px;margin:8px 0}svg{width:70vmin;height:70vmin;margin:24px auto;display:block}small{font-size:14px;color:#555;word-break:break-all}</style></head>
       <body><h1>${esc(S.ajustes.tienda_nombre || "")}</h1><p>${o.reservas ? "Escanea para ver precios y reservar" : "Escanea para ver nuestros productos y precios"}</p>${svg}<small>${esc(link)}</small><script>onload=()=>print()<\/script></body></html>`);
@@ -2378,6 +2378,8 @@ window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); instal
 const isStandalone = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
 const isIOS = () => /iPhone|iPad|iPod/i.test(navigator.userAgent);
 const hoy = () => new Intl.DateTimeFormat("en-CA", { timeZone:"America/Santiago" }).format(new Date());
+// Nombre de archivo sin tildes ni ñ: con ellas, Chromium puede guardar el archivo como "download", sin extensión
+const slug = s => String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "tienda";
 let persisted = null;
 
 function viewDatos(){
@@ -2446,7 +2448,7 @@ function syncCard(){
 async function downloadBackup(){
   const file = await LocalDB.exportAll();
   const url = URL.createObjectURL(new Blob([JSON.stringify(file)], { type:"application/json" }));
-  const a = document.createElement("a"); a.href = url; a.download = `respaldo-${(S.ajustes.tienda_nombre || "tienda").toLowerCase().replace(/[^a-z0-9ñáéíóú]+/g, "-")}-${hoy()}.json`;
+  const a = document.createElement("a"); a.href = url; a.download = `respaldo-${slug(S.ajustes.tienda_nombre)}-${hoy()}.json`;
   document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 5000);
   toast(`Respaldo descargado: ${file.tablas.movs.length} movimientos`);
 }
@@ -2454,6 +2456,7 @@ async function restoreBackup(input){
   const f = input.files?.[0]; input.value = ""; if (!f) return;
   let data; try { data = JSON.parse(await f.text()); } catch(e){ throw new Error("No se pudo leer el archivo"); }
   if (data?.app !== "mi-almacen") throw new Error("El archivo no es un respaldo de esta app");
+  if (!data.tablas || typeof data.tablas !== "object") throw new Error("El respaldo está incompleto o dañado");
   // Los respaldos que llegan por correo vienen del servidor: traen la tienda, pero no los datos de un dispositivo
   const delServidor = !data.tablas.meta && data.tienda?.id;
   const tiendaMeta = delServidor ? data.tienda : (data.tablas.meta || []).find(m => m.key === "tienda")?.value;
