@@ -6,6 +6,9 @@
 //   2. Devuelve los cambios de esa tienda con seq mayor que "desde", y la hora del servidor.
 //   3. Avisa en tiempo real a los otros dispositivos de la tienda (canal "tienda/<id>").
 //
+// Valores: un cambio con números fuera de rango (precios negativos, fiados de más de un
+// millón, celulares mal escritos...) tampoco se guarda, aunque la tienda no tenga cuentas.
+//
 // Acceso: una tienda sin cuentas se abre con su código (un UUID imposible de adivinar).
 // Cuando el dueño activa las cuentas (Fase 4), además hay que entrar con un usuario que
 // sea miembro de la tienda, y cada cambio se revisa contra sus permisos. Un cambio sin
@@ -45,10 +48,14 @@ routerAdd("POST", "/api/sync", (e) => {
         const hlc = String(ch.hlc || "");
         if (!/^\d{13}-\d{4}-[0-9a-z]{1,16}$/.test(hlc) || STORES.indexOf(ch.store) < 0) throw new BadRequestError("Cambio no válido: " + hlc);
         if (tx.countRecords("cambios", $dbx.hashExp({ hlc: hlc })) > 0) continue;
-        if (P) {
-          const key = ch.del != null ? String(ch.del) : String((ch.store === "ajustes" ? (ch.value || {}).clave : (ch.value || {}).id) || "");
-          const prev = c.ultimo(tienda, ch.store, key);
-          if (!c.permite(P, ch.store, ch.value || {}, ch.del, prev)) { rechazados.push({ store: ch.store, key: key, hlc: hlc }); continue; }
+        const borra = ch.del != null;
+        const key = borra ? String(ch.del) : String((ch.store === "ajustes" ? (ch.value || {}).clave : (ch.value || {}).id) || "");
+        // Lo que había solo se busca si hace falta: con cuentas, o si el valor nuevo no pasa la revisión
+        // (puede ser un campo antiguo que no cambió)
+        const prev = P || (!borra && !c.valido(ch.store, ch.value, null)) ? c.ultimo(tienda, ch.store, key) : null;
+        if ((!borra && !c.valido(ch.store, ch.value, prev)) || (P && !c.permite(P, ch.store, ch.value || {}, ch.del, prev))) {
+          rechazados.push({ store: ch.store, key: key, hlc: hlc });
+          continue;
         }
         const r = new Record(col);
         r.set("tienda", tienda);

@@ -135,5 +135,33 @@ function permite(P, store, value, del, prev) {
   }
 }
 
+// ¿Los valores están dentro de lo que la app deja escribir? (lo mismo que revisan sus pantallas)
+// Solo se revisan los campos que cambian, para no trabar registros guardados antes de estas reglas.
+// prev: lo que había (de ultimo())
+const MAX_FIADO = 1000000;
+function valido(store, value, prev) {
+  const v = value || {}, antes = (prev && prev.value) || {};
+  const cambia = (k) => JSON.stringify(v[k]) !== JSON.stringify(antes[k]);
+  const ok = (claves, regla) => claves.every((k) => !cambia(k) || regla(k));
+  const vacio = (k) => v[k] == null || v[k] === "";
+  const positivo = (k) => vacio(k) || (isFinite(+v[k]) && +v[k] >= 0);
+  const celular = (k) => { const d = String(v[k] || "").replace(/\D/g, ""); return !d || d.length === 9 || (d.length === 11 && d.indexOf("56") === 0); };
+  switch (store) {
+    case "products":
+      return ok(["price", "cost", "min", "countQty"], positivo)
+        && ok(["porCaja"], (k) => !v[k] || (Number.isInteger(+v[k]) && +v[k] >= 2 && +v[k] <= 1000))
+        && ok(["countQty"], (k) => v.kg || vacio(k) || Number.isInteger(+v[k]));
+    case "movs": return ok(["qty", "price", "cost"], positivo);
+    case "fiados": return ok(["amount"], (k) => isFinite(+v[k]) && +v[k] > 0 && +v[k] <= MAX_FIADO);
+    case "provmovs": return ok(["amount"], (k) => isFinite(+v[k]) && +v[k] > 0);
+    case "ofertas":
+      if (v.tipo === "pack") return ok(["n", "precio"], () => Number.isInteger(+v.n) && +v.n >= 2 && +v.n <= 100 && +v.precio > 0);
+      return ok(["pct"], (k) => +v[k] > 0 && +v[k] <= 100);
+    case "clients": return ok(["phone"], celular);
+    case "proveedores": case "encargos": return ok(["telefono"], celular);
+  }
+  return true;
+}
+
 module.exports = { UUID, PID, maxSeq, avisar, guardarCambio, desdeInternet, ipCliente, limite,
-  PERMISOS, permisosDe, tieneMiembros, miembroDe, permisosMiembro, ultimo, permite };
+  PERMISOS, permisosDe, tieneMiembros, miembroDe, permisosMiembro, ultimo, permite, valido };

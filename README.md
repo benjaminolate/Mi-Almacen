@@ -55,6 +55,7 @@ Dispositivo A ─┐   POST /api/sync: envía su bandeja y recibe lo nuevo     �
 - El servidor guarda cada cambio una sola vez (por su sello `hlc`) y le asigna un número de orden (`seq`). Cada dispositivo pide "lo nuevo desde el número X".
 - Al recibir un cambio, cada registro se queda con la versión de sello `hlc` más nuevo. Ventas, compras y conteos nunca chocan porque solo se agregan.
 - La bandeja de salida solo se vacía cuando el servidor confirma que guardó los cambios.
+- El servidor rechaza valores fuera de rango (precios negativos, fiados de más de $1.000.000, unidades por caja fuera de 2 a 1000, celulares mal escritos) y vuelve a mandar lo que había. Solo revisa los campos que cambian, así que los registros antiguos se pueden seguir editando.
 - El servidor también devuelve su hora: el dispositivo corrige su reloj si está desfasado.
 - Un dispositivo nuevo se une con un link de invitación (`?unirse=<código>&servidor=<dirección>`) y descarga todo.
 - Sin cuentas, el código de la tienda (un UUID) es la llave de acceso. Con cuentas, además se necesita un usuario de la tienda.
