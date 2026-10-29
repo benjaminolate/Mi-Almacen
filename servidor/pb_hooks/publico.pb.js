@@ -14,7 +14,7 @@ routerUse((e) => {
   if (!c.desdeInternet(e)) return e.next();
   const path = String(e.request.url.path || "/");
   const permitido = path.indexOf("/api/") !== 0 && path.indexOf("/_/") !== 0 && path.indexOf("/servidor/") !== 0 && path.indexOf("/.") < 0;
-  if (permitido || /^\/api\/(publico\/|cuentas\/|sync$|sync\/estado$|realtime$|health$)/.test(path)) return e.next();
+  if (permitido || /^\/api\/(publico\/|cuentas\/|sync$|sync\/estado$|respaldo\/correo$|realtime$|health$)/.test(path)) return e.next();
   throw new ForbiddenError("Esto solo se puede abrir desde el wifi de la tienda.");
 });
 

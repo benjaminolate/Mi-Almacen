@@ -15,7 +15,7 @@ Parte del código de [Inventario_almacen_VD](https://github.com/benjaminolate/In
 - **Fiados** por cliente con recordatorio por WhatsApp, **aviso de que llegó el pan** y **reservas** anotadas por la tienda.
 - **Funciona sin internet:** la app queda guardada en el dispositivo (service worker) y los datos en su base local (IndexedDB).
 - **Instalable** como app (PWA), sin pasar por Play Store.
-- **Respaldo** en un archivo y restauración desde él, reemplazando todo o **agregando solo lo que falta**. El servidor además guarda una copia automática cada día.
+- **Respaldo** en un archivo y restauración desde él, reemplazando todo o **agregando solo lo que falta**. El servidor además guarda una copia automática cada día y puede mandarla **por correo** cada noche, para que quede fuera del computador.
 - **Resumen de ventas** de hoy, 7 días, este mes, mes pasado, este año y año pasado, con descarga a **Excel**.
 - **Página de la tienda** con link y código QR: productos, precios, si hay o no, y **reservas por internet** que se confirman desde la app.
 - **Cuentas y permisos:** usuario y contraseña para cada persona, con roles de dueño, encargado y vendedor, y permisos que elige el dueño.
@@ -92,6 +92,7 @@ Cómo prenderlo: [servidor/INSTRUCCIONES.md](servidor/INSTRUCCIONES.md).
 | `servidor/pb_hooks/sync.pb.js` | El punto de sincronización `/api/sync` |
 | `servidor/pb_hooks/cuentas.pb.js` | Cuentas, entrar, y quién tiene acceso a cada tienda |
 | `servidor/pb_hooks/publico.pb.js` | Página pública, reservas y lo que se puede abrir desde internet |
+| `servidor/pb_hooks/respaldo.pb.js` | Respaldo diario por correo de cada tienda |
 | `servidor/iniciar.bat`, `iniciar.sh` | Prenden el servidor con un doble clic |
 | `sw.js` | Guarda la app en el dispositivo para que abra sin internet |
 | `manifest.webmanifest`, `icons/` | Lo que permite instalarla como app |
