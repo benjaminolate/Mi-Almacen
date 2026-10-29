@@ -17,7 +17,7 @@ Parte del código de [Inventario_almacen_VD](https://github.com/benjaminolate/In
 - **Instalable** como app (PWA), sin pasar por Play Store.
 - **Respaldo** en un archivo y restauración desde él, reemplazando todo o **agregando solo lo que falta**. El servidor además guarda una copia automática cada día y puede mandarla **por correo** cada noche, para que quede fuera del computador.
 - **Resumen de ventas** de hoy, 7 días, este mes, mes pasado, este año y año pasado, con descarga a **Excel**.
-- **Página de la tienda** con link y código QR: productos, precios, si hay o no, y **reservas por internet** que se confirman desde la app.
+- **Página de la tienda** con link y código QR, estilo "link en bio": foto o logo, botones para reseñas de Google, grupo de WhatsApp, cómo llegar y redes sociales, productos, precios, si hay o no, y **reservas por internet** que se confirman desde la app.
 - **Cuentas y permisos:** usuario y contraseña para cada persona, con roles de dueño, encargado y vendedor, y permisos que elige el dueño.
 - **Tutorial** la primera vez y un botón **?** en cada pantalla que explica cómo usarla.
 - **Extensiones:** cada tienda activa solo lo que usa, en Más > Extensiones. Al quitar una, sus datos no se borran.
@@ -64,6 +64,7 @@ Dispositivo A ─┐   POST /api/sync: envía su bandeja y recibe lo nuevo     �
 
 - `tienda.html?t=<pid>` muestra los productos con precio de una tienda y deja reservar. El `pid` es un código aparte del de la tienda: el link público no da acceso a los datos.
 - La app publica la vitrina en `POST /api/publico/publicar` cuando algo cambia (tabla `vitrinas`). Los clientes la leen en `GET /api/publico/<pid>`.
+- Arriba de los productos van la foto o logo (achicada a 320 px en el dispositivo) y los links que la tienda agrega en Más > Página de la tienda. Solo se publican links web, de WhatsApp y de teléfono; cualquier otra cosa se convierte en un link `https://`.
 - Una reserva (`POST /api/publico/<pid>/reserva`) entra a la tabla `cambios` como si viniera de un dispositivo más, así que llega sola a la app. El cliente consulta su estado con un código que solo tiene él.
 - Contra abusos: campo trampa para robots, tiempo mínimo en la página, celular chileno obligatorio, un límite de reservas por celular para un mismo día que elige la tienda (1, 2, 3 o 5; las rechazadas no cuentan), máximo diario por tienda, límite por IP y números bloqueados.
 - Por internet (Tailscale Funnel o Cloudflare) solo responden la app, la página, las reservas y la sincronización; el panel de PocketBase queda para el wifi.
@@ -85,6 +86,7 @@ Cómo prenderlo: [servidor/INSTRUCCIONES.md](servidor/INSTRUCCIONES.md).
 | `index.html` | Toda la app: estilos, pantallas y acciones |
 | `catalogos.js` | Productos típicos de cada tipo de negocio (sin precios) |
 | `tienda.html` | Página pública de la tienda, para los clientes |
+| `pagina.js` | Tipos e íconos de los links de la página de la tienda (vienen de Inventario_almacen_VD) |
 | `qr.js` | Generador de códigos QR (Kazuhiko Arase, licencia MIT) |
 | `local-db.js` | Base local (IndexedDB), bandeja de salida, reloj lógico y respaldos |
 | `sync.js` | Envía y recibe cambios con el servidor, y escucha los avisos en tiempo real |
