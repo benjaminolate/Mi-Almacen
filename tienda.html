@@ -140,7 +140,7 @@ function render(){
   const w = norm(ui.q).split(" ").filter(Boolean);
   const list = prods().filter(p => (ui.f === "Todos" || p.c === ui.f) && w.every(x => norm(p.n).includes(x)));
   const by = {}; list.forEach(p => (by[p.c] ||= []).push(p));
-  const wa = T.whatsapp ? `https://wa.me/${T.whatsapp}?text=${encodeURIComponent("Hola " + (T.nombre || "") + ", ")}` : "";
+  const wa = T.whatsapp ? `https://wa.me/${String(T.whatsapp).replace(/\D/g, "")}?text=${encodeURIComponent("Hola " + (T.nombre || "") + ", ")}` : "";
   const hayRes = T.reservas && prods().some(p => p.r);
   const foto = /^data:image\/(jpeg|png|webp);base64,[a-z0-9+/=]+$/i.test(String(T.foto || "")) ? T.foto : "";
   const links = (T.links || []).map(l => [l, PAGINA.href(l)]).filter(x => x[1]);
