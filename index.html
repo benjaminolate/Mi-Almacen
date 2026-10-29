@@ -126,6 +126,13 @@ nav.tabs button[aria-current="page"]{color:var(--brand)}
 .empty{padding:20px;text-align:center;color:var(--muted)}
 .diff{font-size:13px;font-weight:600}
 .code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;overflow-wrap:anywhere}
+.lk{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}
+.lk:last-child{border-bottom:0}
+.lk svg{width:24px;height:24px;flex:none;stroke:var(--brand);fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.lk .main{flex:1;min-width:0}
+.lk .btn{padding:6px 9px}
+.avatar{width:72px;height:72px;border-radius:50%;background:var(--brand);color:var(--brand-fg);display:grid;place-items:center;overflow:hidden;font-family:var(--font-display);font-weight:800;font-size:28px;flex:none}
+.avatar img{width:100%;height:100%;object-fit:cover}
 .net{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--muted);white-space:nowrap}
 .net i{width:8px;height:8px;border-radius:50%;background:var(--ok)}
 .net.off i{background:var(--warn)}
@@ -189,6 +196,7 @@ nav.tabs button[aria-current="page"]{color:var(--brand)}
 <script src="local-db.js"></script>
 <script src="catalogos.js"></script>
 <script src="sync.js"></script>
+<script src="pagina.js"></script>
 <script>
 (function(){
 "use strict";
@@ -1335,9 +1343,13 @@ function vitrina(){
   const productos = S.products.filter(p => disp(p) && (o.mostrar !== "pan" || p.cat === "Pan") && (p.price > 0 || reservable(p)))
     .sort((a, b) => sectores().indexOf(a.cat) - sectores().indexOf(b.cat) || a.name.localeCompare(b.name, "es"))
     .map(p => Object.assign({ id:p.id, n:p.name, c:p.cat, p:p.price }, p.kg ? { kg:1 } : {}, reservable(p) ? { r:1 } : {}, o.stock ? { s:estado(p) } : {}));
-  return { data:{ v:1, nombre:S.ajustes.tienda_nombre || "", mensaje:o.mensaje || "", direccion:o.direccion || "", horario:o.horario || "", whatsapp:telCL(o.whatsapp),
+  const v = { data:{ v:1, nombre:S.ajustes.tienda_nombre || "", mensaje:o.mensaje || "", direccion:o.direccion || "", horario:o.horario || "", whatsapp:telCL(o.whatsapp),
       color:getComputedStyle(document.documentElement).getPropertyValue("--brand").trim(), reservas:!!o.reservas, stock:!!o.stock, diasMax:o.diasMax ?? 1, porPersona:o.porPersona || 3, productos },
     privado:{ bloqueados:o.bloqueados || [], maxDia:o.maxDia || 40 }, activo:ext("pagina") && !!o.activo };
+  if (fotoOk(o.foto)) v.data.foto = o.foto;
+  const links = (o.links || []).filter(l => PAGINA.href(l)).map(l => ({ tipo:l.tipo, titulo:l.titulo, valor:l.valor }));
+  if (links.length) v.data.links = links;
+  return v;
 }
 const vit = { last:"", timer:null, due:0, at:0, error:"" };
 const vitEstado = () => !meta.servidor ? "" : vit.error ? `No se pudo publicar: ${vit.error}. Se reintenta solo.` : vit.at ? `✓ Publicada ${ago(vit.at)}` : pub().activo ? "Publicando…" : "";
@@ -1398,12 +1410,20 @@ function viewPagina(){
     <div class="card stack"><h3>Qué se muestra</h3>
       <div class="field"><label>Productos</label>${seg("data-pgm", o.mostrar || "todo", [["todo","Todos los que tienen precio"],["pan","Solo el pan"]])}</div>
       <label class="row small"><input type="checkbox" id="pgstock" ${o.stock ? "checked" : ""}> Mostrar si hay, quedan pocos o está agotado (solo los productos contados)</label>
+      <div class="row" style="gap:14px;flex-wrap:nowrap"><div class="avatar">${fotoOk(o.foto) ? `<img src="${esc(o.foto)}" alt="">` : esc((S.ajustes.tienda_nombre || "T")[0])}</div>
+        <div class="stack" style="gap:8px;flex:1"><label class="btn sm filebtn">${fotoOk(o.foto) ? "Cambiar foto" : "Agregar foto o logo"}<input type="file" id="pgfoto" accept="image/*"></label>
+        ${fotoOk(o.foto) ? `<button class="btn sm ghost" id="pgnofoto">Quitar foto</button>` : ""}</div></div>
       <div class="field"><label for="pgmsg">Mensaje de bienvenida</label><input class="input" id="pgmsg" value="${esc(o.mensaje || "")}" maxlength="140" placeholder="Ej: Pan amasado calentito todos los días"></div>
       <div class="field"><label for="pgdir">Dirección</label><input class="input" id="pgdir" value="${esc(o.direccion || "")}" maxlength="80" placeholder="Ej: Los Aromos 123, Quilpué"></div>
       <div class="field"><label for="pghor">Horario</label><input class="input" id="pghor" value="${esc(o.horario || "")}" maxlength="80" placeholder="Ej: Lunes a sábado de 8:00 a 21:00"></div>
       <div class="field"><label for="pgwa">WhatsApp de la tienda (opcional)</label><input class="input" id="pgwa" value="${esc(o.whatsapp || "")}" inputmode="tel" placeholder="9 XXXX XXXX"></div>
       <button class="btn block" id="pgsave">Guardar</button>
     </div>
+    <div class="card"><div class="spread"><h3>Links</h3><button class="btn sm primary" id="pgadd">+ Agregar link</button></div>
+      <div class="list">${(o.links || []).map((l, i, ls) => `<div class="lk">${PAGINA.ICONS[l.tipo] || PAGINA.ICONS.otro}<div class="main"><div style="font-weight:600">${esc(l.titulo || PAGINA.tipo(l.tipo)[1])}</div><div class="small muted code">${esc(l.valor)}</div></div>
+        <button class="btn sm ghost" data-lup="${i}" aria-label="Subir" ${i ? "" : "disabled"}>↑</button><button class="btn sm ghost" data-ldown="${i}" aria-label="Bajar" ${i < ls.length - 1 ? "" : "disabled"}>↓</button><button class="btn sm" data-ledit="${i}">Editar</button></div>`).join("")
+        || `<div class="empty">Todavía no hay links. Agrega el de las reseñas de Google, el del grupo de WhatsApp, cómo llegar y tus redes sociales.</div>`}</div>
+      <p class="small muted" style="margin:0">Aparecen como botones grandes arriba de los productos, en este orden.</p></div>
     <div class="card stack"><h3>Reservas por internet</h3>
       <label class="row small"><input type="checkbox" id="pgres" ${o.reservas ? "checked" : ""}> Los clientes pueden reservar desde la página</label>
       ${o.reservas ? `<div class="field"><label>Qué se puede reservar</label>${seg("data-pgr", o.reservar || "pan", [["pan","El pan marcado en Tipos de pan"],["todo","Cualquier producto"]])}</div>
@@ -1419,6 +1439,38 @@ function viewPagina(){
     ${o.pid ? `<button class="btn ghost block" id="pgnew">Cambiar el link (el anterior y su QR dejan de funcionar)</button>` : ""}`}
   </div>`;
 }
+// La foto se achica a 320 px para que la página cargue rápido
+const fotoOk = f => /^data:image\/(jpeg|png|webp);base64,[a-z0-9+/=]+$/i.test(String(f || ""));
+function resizeImage(file){ return new Promise((res, rej) => { const img = new Image(), url = URL.createObjectURL(file);
+  img.onload = () => { const s = 320, c = document.createElement("canvas"); c.width = c.height = s; const m = Math.min(img.width, img.height);
+    c.getContext("2d").drawImage(img, (img.width - m)/2, (img.height - m)/2, m, m, 0, 0, s, s); URL.revokeObjectURL(url); res(c.toDataURL("image/jpeg", 0.82)); };
+  img.onerror = () => { URL.revokeObjectURL(url); rej(new Error("No se pudo leer la imagen")); }; img.src = url; }); }
+// Agregar o editar un link de la página (tipos en pagina.js)
+function openLink(i){
+  const links = (pub().links || []).slice(), cur = i != null ? links[i] : null;
+  let tp = cur?.tipo || "resena";
+  const draw = () => { const t = PAGINA.tipo(tp);
+    openModal(`<div class="stack">
+      <div class="spread"><h2>${cur ? "Editar link" : "Agregar link"}</h2><button class="btn ghost sm" data-close>Cerrar</button></div>
+      <div class="chips" style="flex-wrap:wrap">${PAGINA.TIPOS.filter(x => x[0] !== "pan").map(x => `<button class="chip" data-ltipo="${x[0]}" aria-pressed="${tp === x[0]}">${esc(x[0] === "otro" ? "Otro" : x[1].replace(/^(Déjanos tu |Únete a nuestro |Escríbenos por )/, "").replace(/^./, c => c.toUpperCase()))}</button>`).join("")}</div>
+      <div class="field"><label for="lval">${esc(t[2])}</label><input class="input code" id="lval" value="${esc(cur && cur.tipo === tp ? cur.valor : "")}" placeholder="${esc(t[3])}" ${tp === "whatsapp" || tp === "telefono" ? 'type="tel" inputmode="tel"' : 'inputmode="url" autocapitalize="none"'} maxlength="300"></div>
+      ${t[4] ? `<p class="small muted" style="margin:0">${esc(t[4])}</p>` : ""}
+      <div class="field"><label for="ltit">Texto del botón</label><input class="input" id="ltit" maxlength="60" value="${esc(cur && cur.tipo === tp && cur.titulo ? cur.titulo : t[1])}"></div>
+      <button class="btn primary block" id="lsave">Guardar</button>
+      ${cur ? `<button class="btn ghost block" id="ldel" style="color:var(--bad)">Quitar este link</button>` : ""}
+    </div>`);
+    document.querySelectorAll("[data-ltipo]").forEach(b => b.onclick = () => { tp = b.dataset.ltipo; draw(); });
+    if (tp === "whatsapp" || tp === "telefono") phoneInput($("#lval"));
+    $("#lsave").onclick = () => run(async () => { const valor = $("#lval").value.trim(); if (!valor) return $("#lval").focus();
+      if ((tp === "whatsapp" || tp === "telefono") && !phoneOk(valor)){ $("#lval").focus(); return toast(PHONE_MSG); }
+      if (tp !== "whatsapp" && tp !== "telefono" && !/^(https?:\/\/)?[^\s/]+\.[^\s]+$/i.test(valor)){ $("#lval").focus(); return toast("Pega el link completo, por ejemplo " + t[3]); }
+      const l = { tipo:tp, valor, titulo:$("#ltit").value.trim() || t[1] };
+      if (cur) links[i] = l; else links.push(l);
+      await setPub({ links }); closeModal(); render(); toast("Link guardado"); });
+    const del = $("#ldel"); if (del) del.onclick = () => run(async () => { links.splice(i, 1); await setPub({ links }); closeModal(); render(); toast("Link quitado"); });
+  };
+  draw();
+}
 function bindPagina(app){
   if (!meta.servidor) return;
   const o = pub();
@@ -1430,6 +1482,13 @@ function bindPagina(app){
   $("#pgstock").onchange = e => run(async () => { await setPub({ stock:e.target.checked }); });
   $("#pgres").onchange = e => run(async () => { await setPub({ reservas:e.target.checked }); render(); });
   const mx = $("#pgmax"); if (mx) mx.onchange = () => run(async () => { await setPub({ maxDia:Math.max(1, Math.round(+mx.value || 40)) }); toast("Guardado"); });
+  $("#pgfoto").onchange = e => run(async () => { const f = e.target.files[0]; if (!f) return; await setPub({ foto:await resizeImage(f) }); render(); toast("Foto guardada"); });
+  const nf = $("#pgnofoto"); if (nf) nf.onclick = () => run(async () => { await setPub({ foto:"" }); render(); toast("Foto quitada"); });
+  $("#pgadd").onclick = () => openLink(null);
+  app.querySelectorAll("[data-ledit]").forEach(b => b.onclick = () => openLink(+b.dataset.ledit));
+  const mover = (i, d) => run(async () => { const ls = (pub().links || []).slice(); [ls[i], ls[i + d]] = [ls[i + d], ls[i]]; await setPub({ links:ls }); render(); });
+  app.querySelectorAll("[data-lup]").forEach(b => b.onclick = () => mover(+b.dataset.lup, -1));
+  app.querySelectorAll("[data-ldown]").forEach(b => b.onclick = () => mover(+b.dataset.ldown, 1));
   $("#pgsave").onclick = () => run(async () => { const wa = $("#pgwa").value.trim(); if (wa && !telCL(wa)){ $("#pgwa").focus(); return toast("Revisa el número de WhatsApp"); }
     await setPub({ mensaje:$("#pgmsg").value.trim(), direccion:$("#pgdir").value.trim(), horario:$("#pghor").value.trim(), whatsapp:wa }); toast("Guardado"); render(); });
   $("#pgurls").onclick = () => run(async () => { const u = $("#pgurl").value.trim().replace(/\/+$/, "");

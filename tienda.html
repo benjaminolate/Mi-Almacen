@@ -74,12 +74,19 @@ p{margin:0}
 .err{color:var(--bad);font-size:14px;font-weight:600}
 .empty{padding:20px 0;text-align:center;color:var(--muted)}
 .skeleton{height:18px;border-radius:6px;background:var(--surface-2);margin:10px 0}
+.avatar{width:72px;height:72px;border-radius:50%;background:var(--brand);color:var(--brand-fg);display:grid;place-items:center;overflow:hidden;font-family:var(--font-display);font-weight:800;font-size:28px;flex:none}
+.avatar img{width:100%;height:100%;object-fit:cover}
+.links{display:flex;flex-direction:column;gap:10px}
+.link{display:flex;align-items:center;gap:12px;padding:14px 16px;border:1px solid var(--line);background:var(--surface);border-radius:var(--r);color:inherit;text-decoration:none;font-weight:600}
+.link svg{width:24px;height:24px;flex:none;stroke:var(--brand);fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.link span{flex:1;min-width:0;overflow-wrap:anywhere}
 </style>
 </head>
 <body>
 <div class="wrap" id="app"><header><div class="skeleton" style="width:60%;height:30px"></div><div class="skeleton" style="width:80%"></div></header></div>
 <div class="bar" id="bar" hidden><button class="btn primary block" id="go"></button></div>
 <div id="modal"></div>
+<script src="pagina.js"></script>
 <script>
 (function(){
 "use strict";
@@ -135,13 +142,16 @@ function render(){
   const by = {}; list.forEach(p => (by[p.c] ||= []).push(p));
   const wa = T.whatsapp ? `https://wa.me/${T.whatsapp}?text=${encodeURIComponent("Hola " + (T.nombre || "") + ", ")}` : "";
   const hayRes = T.reservas && prods().some(p => p.r);
+  const foto = /^data:image\/(jpeg|png|webp);base64,[a-z0-9+/=]+$/i.test(String(T.foto || "")) ? T.foto : "";
+  const links = (T.links || []).map(l => [l, PAGINA.href(l)]).filter(x => x[1]);
   $("#app").innerHTML = `<header class="stack" style="gap:8px">
-      <h1>${esc(T.nombre || "Tienda")}</h1>
+      <div class="row" style="gap:14px;flex-wrap:nowrap">${foto ? `<div class="avatar"><img src="${esc(foto)}" alt=""></div>` : ""}<h1>${esc(T.nombre || "Tienda")}</h1></div>
       ${T.mensaje ? `<p>${esc(T.mensaje)}</p>` : ""}
       ${T.direccion || T.horario ? `<p class="small muted">${[T.direccion, T.horario].filter(Boolean).map(esc).join(" · ")}</p>` : ""}
       ${wa ? `<div><a class="btn sm" href="${esc(wa)}" target="_blank" rel="noopener">Escribir por WhatsApp</a></div>` : ""}
     </header>
     <div class="stack">
+      ${links.length ? `<div class="links">${links.map(([l, h]) => `<a class="link" href="${esc(h)}" target="_blank" rel="noopener">${PAGINA.ICONS[l.tipo] || PAGINA.ICONS.otro}<span>${esc(l.titulo || PAGINA.tipo(l.tipo)[1])}</span></a>`).join("")}</div>` : ""}
       <div id="mias"></div>
       ${hayRes ? `<p class="small muted">Elige lo que quieres reservar con los botones + y la tienda te confirma.</p>` : ""}
       <input class="input" id="q" type="search" placeholder="Buscar producto" value="${esc(ui.q)}" autocomplete="off">

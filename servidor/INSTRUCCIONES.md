@@ -106,6 +106,7 @@ En la app, activa la extensión **Página de la tienda** (Más → Extensiones) 
 
 - Prende **Página activa**. Aparecen el link, el código QR, **Descargar QR** e **Imprimir cartel** para pegar en el mostrador.
 - Elige si muestra todos los productos con precio o solo el pan, y si muestra cuando algo está agotado.
+- Agrega una **foto o logo** y **Links**: reseñas de Google, grupo de WhatsApp, WhatsApp, cómo llegar, teléfono, Instagram, Facebook, TikTok u otro. Salen como botones grandes arriba de los productos, en el orden que elijas con las flechas. Sirve como el "link en bio" de tus redes.
 - Con **Reservas por internet**, los clientes reservan con su nombre y celular. La reserva llega sola a todos los dispositivos de la tienda (suena) y aparece en **Reservas**: ahí la confirmas o la rechazas y le avisas por WhatsApp. El cliente ve en la misma página si su reserva fue confirmada.
 - Para evitar abusos: cada celular puede hacer las reservas que elijas para un mismo día (1, 2, 3 o 5; por defecto 3, y las rechazadas no cuentan), hay un máximo de reservas por día que eliges tú, y puedes bloquear un número desde cualquiera de sus reservas.
 - **Cambiar el link** hace que el anterior y su QR dejen de funcionar.
