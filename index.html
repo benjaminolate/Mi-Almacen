@@ -2622,7 +2622,7 @@ async function openStore(){
   if (!meta.demo && meta.servidor){ Sync.start(meta.servidor, meta.tienda.id); refrescarCuenta(); } else Sync.stop();
 }
 Sync.state.onStatus = s => { LocalDB.pendingCount().then(n => { meta.pending = n; if (MODE) updateNet(); }, () => {}); if (s === "cuenta" && MODE) render(); };
-Sync.state.onRechazo = n => toast(n === 1 ? "Un cambio no se guardó porque tu usuario no tiene permiso" : `${n} cambios no se guardaron porque tu usuario no tiene permiso`);
+Sync.state.onRechazo = n => toast(`${n === 1 ? "Un cambio no se guardó" : n + " cambios no se guardaron"} en el servidor: tu usuario no tiene permiso o había un número fuera de lo permitido`);
 Sync.state.onChange = async () => { await loadLocal(); avisarReservas(); if (MODE) softRender(); };
 
 function showSetup(){
