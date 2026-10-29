@@ -56,6 +56,8 @@ h3{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;
 .btn.primary{background:var(--brand);color:var(--brand-fg);border-color:var(--brand)}
 .btn.accent{background:var(--accent);color:#1d1606;border-color:var(--accent)}
 .btn.ghost{background:transparent}
+.linkbtn{all:unset;cursor:pointer;color:inherit;text-decoration:underline;text-decoration-color:var(--line);text-underline-offset:3px;overflow-wrap:anywhere}
+.linkbtn:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
 .btn.sm{padding:6px 10px;font-size:13px}
 .btn.block{width:100%}
 .panbtn{display:flex;gap:14px;align-items:center;width:100%;text-align:left;border:0;border-radius:var(--r);padding:14px 16px;background:var(--accent);color:#1d1606}
@@ -958,6 +960,8 @@ function viewRecibir(){
       ${ext("proveedores") ? `<label class="row small" style="padding-top:8px"><input type="checkbox" id="rdebe" ${ui.recv.debe ? "checked" : ""}> Quedé debiendo esta factura al proveedor</label>` : ""}
     </div>
     <button class="btn primary block" id="confirm" ${ui.recv.items.length?"":"disabled"}>Guardar recepción</button>
+    ${ui.recv.items.length || ui.recv.supplier ? `<button class="btn ghost block" id="rdiscard">Descartar y empezar de nuevo</button>
+    <p class="small muted" style="margin:0;text-align:center">Lo anotado queda guardado aunque salgas de esta pantalla, hasta que lo guardes o lo descartes.</p>` : ""}
   </div>`;
 }
 function addToRecv(p){ const l = ui.recv.items.find(l => l.pid === p.id); if (l) l.qty++; else ui.recv.items.push({ pid:p.id, qty:p.kg ? 1 : 12, cost:p.cost }); render(); }
@@ -983,7 +987,7 @@ function viewContar(){
     <div class="field"><label>Al escanear</label><div class="seg" role="group"><button data-sask="0" aria-pressed="${!prefs().scanAsk}">Suma 1 cada vez</button><button data-sask="1" aria-pressed="${!!prefs().scanAsk}">Preguntar cantidad</button></div></div>
     <div class="card" style="padding-block:4px">
       ${ps.map(p => { const d = ui.draft[p.id] || {}; const off = d.none ?? !p.has; const prev = stockOf(p);
-        return `<div class="countrow ${off?"off":""}"><div style="min-width:0"><div style="font-weight:600">${esc(p.name)}</div><div class="small muted">${off ? "No lo tenemos" : prev==null ? "Sin contar" : `Sistema dice: ${fq(p, prev)}${p.estimated?" (aprox.)":""}`}</div></div>
+        return `<div class="countrow ${off?"off":""}"><div style="min-width:0"><button class="linkbtn" data-cprod="${p.id}" style="font-weight:600">${esc(p.name)}</button><div class="small muted">${off ? "No lo tenemos" : prev==null ? "Sin contar" : `Sistema dice: ${fq(p, prev)}${p.estimated?" (aprox.)":""}`}</div></div>
           <input class="input" type="number" min="0" ${p.kg ? `step="any" inputmode="decimal"` : `inputmode="numeric"`} placeholder="${p.kg ? "kg" : "—"}" value="${d.qty ?? ""}" data-cq="${p.id}" ${off?"disabled":""} aria-label="Cantidad de ${esc(p.name)}">
           <div class="opts"><label><input type="checkbox" data-ce="${p.id}" ${d.est?"checked":""} ${off?"disabled":""}> Es aproximado</label>
           ${p.kg || off ? "" : `<button class="btn sm" data-cbox="${p.id}">Cajas ×</button>`}
@@ -1220,7 +1224,10 @@ function openNewClient(){
 }
 
 // ---------- Aviso del pan ----------
+const panDefault = () => `🍞 ¡Llegó el pan calentito! Los esperamos en ${S.ajustes.tienda_nombre || "el almacén"}.`;
 function openPan(){
+  // Si el mensaje quedó vacío vuelve el de siempre
+  if (!String(S.panMsg || "").trim()) S.panMsg = panDefault();
   openModal(`<div class="stack">
     <div class="spread"><h2>Avisar que llegó el pan</h2><button class="btn ghost sm" data-close>Cerrar</button></div>
     <div class="field"><label for="pm">Mensaje</label><textarea class="input" id="pm" rows="3">${esc(S.panMsg)}</textarea></div>
@@ -1232,8 +1239,10 @@ function openPan(){
       <li>Eliges el grupo de clientes y tocas enviar.</li>
     </ol>
     <p class="small muted" style="margin:0">El mensaje queda guardado para la próxima vez.</p>
+    <button class="btn ghost block" id="pandef">Volver al mensaje de siempre</button>
   </div>`);
-  $("#pm").oninput = e => { act.panMsg(e.target.value); $("#pango").href = waLink("", S.panMsg); const w = $("#panweb"); if (w) w.href = waWeb("", S.panMsg); };
+  $("#pandef").onclick = () => { const pm = $("#pm"); pm.value = panDefault(); pm.oninput({ target:pm }); toast("Mensaje de siempre"); };
+  $("#pm").oninput = e => { act.panMsg(e.target.value.trim() ? e.target.value : panDefault()); $("#pango").href = waLink("", S.panMsg); const w = $("#panweb"); if (w) w.href = waWeb("", S.panMsg); };
   $("#pancopy").onclick = () => { const t = $("#pm").value;
     const ok = () => toast("Mensaje copiado");
     try { navigator.clipboard.writeText(t).then(ok, () => { $("#pm").select(); toast("Selecciona y copia el texto"); }); } catch(e){ $("#pm").select(); } };
@@ -1327,7 +1336,7 @@ function vitrina(){
     .sort((a, b) => sectores().indexOf(a.cat) - sectores().indexOf(b.cat) || a.name.localeCompare(b.name, "es"))
     .map(p => Object.assign({ id:p.id, n:p.name, c:p.cat, p:p.price }, p.kg ? { kg:1 } : {}, reservable(p) ? { r:1 } : {}, o.stock ? { s:estado(p) } : {}));
   return { data:{ v:1, nombre:S.ajustes.tienda_nombre || "", mensaje:o.mensaje || "", direccion:o.direccion || "", horario:o.horario || "", whatsapp:telCL(o.whatsapp),
-      color:getComputedStyle(document.documentElement).getPropertyValue("--brand").trim(), reservas:!!o.reservas, stock:!!o.stock, diasMax:o.diasMax ?? 1, productos },
+      color:getComputedStyle(document.documentElement).getPropertyValue("--brand").trim(), reservas:!!o.reservas, stock:!!o.stock, diasMax:o.diasMax ?? 1, porPersona:o.porPersona || 3, productos },
     privado:{ bloqueados:o.bloqueados || [], maxDia:o.maxDia || 40 }, activo:ext("pagina") && !!o.activo };
 }
 const vit = { last:"", timer:null, due:0, at:0, error:"" };
@@ -1399,8 +1408,9 @@ function viewPagina(){
       <label class="row small"><input type="checkbox" id="pgres" ${o.reservas ? "checked" : ""}> Los clientes pueden reservar desde la página</label>
       ${o.reservas ? `<div class="field"><label>Qué se puede reservar</label>${seg("data-pgr", o.reservar || "pan", [["pan","El pan marcado en Tipos de pan"],["todo","Cualquier producto"]])}</div>
       <div class="field"><label>Con cuánta anticipación</label>${seg("data-pgd", o.diasMax ?? 1, [[0,"Solo hoy"],[1,"Hasta mañana"],[2,"Hasta 2 días"]])}</div>
+      <div class="field"><label>Reservas por persona para un mismo día</label>${seg("data-pgpp", o.porPersona || 3, [[1,"1"],[2,"2"],[3,"3"],[5,"5"]])}</div>
       <div class="field"><label for="pgmax">Máximo de reservas por día</label><input class="input" id="pgmax" type="number" min="1" inputmode="numeric" value="${o.maxDia || 40}"></div>
-      <p class="small muted" style="margin:0">Para evitar abusos: cada celular puede hacer hasta 3 reservas al día, se pide nombre y celular, y puedes bloquear números desde cada reserva.${(o.bloqueados || []).length ? ` Números bloqueados: ${(o.bloqueados || []).length}.` : ""}</p>` : ""}
+      <p class="small muted" style="margin:0">Para evitar abusos: se cuenta por celular y las rechazadas no cuentan; se pide nombre y celular, y puedes bloquear números desde cada reserva. Para pedidos más grandes, el cliente tiene que hablar con la tienda.${(o.bloqueados || []).length ? ` Números bloqueados: ${(o.bloqueados || []).length}.` : ""}</p>` : ""}
     </div>
     <div class="card stack"><h3>Dirección en internet</h3>
       <p class="small muted" style="margin:0">La dirección con candado (https) del servidor, por ejemplo la de Tailscale Funnel. Si la dejas vacía se usa la del servidor.</p>
@@ -1416,6 +1426,7 @@ function bindPagina(app){
   app.querySelectorAll("[data-pgm]").forEach(b => b.onclick = () => run(async () => { await setPub({ mostrar:b.dataset.pgm }); render(); }));
   app.querySelectorAll("[data-pgr]").forEach(b => b.onclick = () => run(async () => { await setPub({ reservar:b.dataset.pgr }); render(); }));
   app.querySelectorAll("[data-pgd]").forEach(b => b.onclick = () => run(async () => { await setPub({ diasMax:+b.dataset.pgd }); render(); }));
+  app.querySelectorAll("[data-pgpp]").forEach(b => b.onclick = () => run(async () => { await setPub({ porPersona:+b.dataset.pgpp }); render(); toast("Límite guardado"); }));
   $("#pgstock").onchange = e => run(async () => { await setPub({ stock:e.target.checked }); });
   $("#pgres").onchange = e => run(async () => { await setPub({ reservas:e.target.checked }); render(); });
   const mx = $("#pgmax"); if (mx) mx.onchange = () => run(async () => { await setPub({ maxDia:Math.max(1, Math.round(+mx.value || 40)) }); toast("Guardado"); });
@@ -2454,7 +2465,8 @@ function viewMas(){
       meta.servidor && !meta.demo && opt("cuentas","personas","Cuentas y permisos", cuentasOn() ? `Entraste como ${esc(meta.cuenta?.usuario?.nombre || "")}` : "Usuario y contraseña para cada persona que atiende"),
       opt("extensiones","extensiones","Extensiones", "Activa solo las funciones que usa tu negocio"),
       opt("apariencia","apariencia","Apariencia", "Colores, estilo y tipo de letra"),
-      opt("datos","datos","Tienda y datos", `${meta.pending} cambios guardados en este dispositivo · respaldo e instalación`)])}
+      opt("datos","datos","Tienda y datos", `${meta.pending} cambios guardados en este dispositivo · respaldo e instalación`),
+      cuentasOn() && meta.cuenta && `<button class="sector" id="logout"><span class="name" style="display:flex;gap:10px;align-items:center"><span style="width:22px;height:22px;display:inline-flex" class="mi">${ICONS.personas}</span>Cerrar sesión</span><span></span><span class="sub">Estás como ${esc(meta.cuenta.usuario.nombre)} · para que entre otra persona en este dispositivo</span></button>`])}
   </div>`;
 }
 
@@ -2482,6 +2494,7 @@ function render(){
   app.querySelectorAll("[data-back]").forEach(b => b.onclick = back);
   const pb = $("#panbtn"); if (pb) pb.onclick = openPan;
   const tb = $("#tourbtn"); if (tb) tb.onclick = () => tour(0);
+  const lo = $("#logout"); if (lo) lo.onclick = cerrarSesion;
   const tc = $("#tourno"); if (tc) tc.onclick = () => run(async () => { await setPref({ tourVisto:true }); rerender(); });
   const ts = $("#toursi"); if (ts) ts.onclick = () => { setPref({ tourVisto:true }); tour(0); };
   app.querySelectorAll("[data-ayuda]").forEach(b => b.onclick = () => openAyuda(ui.view));
@@ -2585,7 +2598,13 @@ function render(){
     $("#confirm").onclick = () => run(async () => { const n = ui.recv.items.reduce((a,l) => a + (l.qty||0), 0);
       $("#confirm").disabled = true; $("#confirm").textContent = "Guardando…";
       await act.receive(ui.recv.supplier, ui.recv.items, { debe:ui.recv.debe }).finally(render);
-      ui.recv.items = []; ui.recv.debe = false; render(); toast(`Recepción guardada: ${n} unidades`); });
+      const sinContar = ui.recv.items.map(l => P(l.pid)).filter(p => p && p.countAt == null);
+      ui.recv = { supplier:"", items:[], debe:false }; render();
+      toast(`Recepción guardada: ${fq(null, n)} unidades` + (sinContar.length ? `. ${sinContar.length === 1 ? sinContar[0].name + " todavía no se cuenta" : sinContar.length + " productos todavía no se cuentan"}: su stock aparece cuando se cuente su sector en Contar.` : "")); });
+    const rdi = $("#rdiscard"); if (rdi) rdi.onclick = () => {
+      openModal(`<div class="stack"><h2>¿Descartar la recepción?</h2><p style="margin:0">Se borran los productos anotados y el proveedor elegido. El stock no cambia.</p>
+        <div class="grid2"><button class="btn" data-close>Cancelar</button><button class="btn primary" id="rdok">Descartar</button></div></div>`);
+      $("#rdok").onclick = () => { ui.recv = { supplier:"", items:[], debe:false }; closeModal(); render(); toast("Recepción descartada"); }; };
   }
   if (v === "contar"){
     app.querySelectorAll("[data-sector]").forEach(b => b.onclick = () => { ui.sector = b.dataset.sector; ui.draft = {}; pushNav(); render(); window.scrollTo(0,0); });
@@ -2597,6 +2616,7 @@ function render(){
       $("#scan").onclick = () => openScanSheet(scanCount);
       app.querySelectorAll("[data-sask]").forEach(b => b.onclick = () => run(async () => { await setPref({ scanAsk:b.dataset.sask === "1" }); rerender(); }));
       app.querySelectorAll("[data-cbox]").forEach(b => b.onclick = () => openCantidad(P(b.dataset.cbox)));
+      app.querySelectorAll("[data-cprod]").forEach(b => b.onclick = () => openProduct(P(b.dataset.cprod)));
       $("#addp").onclick = () => openProductForm(ui.sector, "", () => render());
       $("#finish").onclick = finishCount;
     }
@@ -2755,6 +2775,14 @@ async function cuentaApi(base, path, body, token){
   if (!r.ok) throw Object.assign(new Error(j.message || `El servidor respondió ${r.status}`), { status:r.status });
   return j;
 }
+// Cerrar sesión para que entre otra persona en este dispositivo (en Cuentas y en Más > Configuración)
+function cerrarSesion(){
+  const salir = () => run(async () => { await guardarCuenta(null); closeModal(); render(); });
+  const pend = meta.pending ? `<p class="small" style="margin:0;color:var(--warn);font-weight:600">Este dispositivo tiene ${meta.pending} cambios que todavía no llegan al servidor. Se van a enviar con el usuario que entre después, y si no tiene permiso para alguno, ese cambio se pierde.</p>` : "";
+  openModal(`<div class="stack"><h2>¿Cerrar sesión?</h2><p style="margin:0">Sales de la cuenta de ${esc(meta.cuenta?.usuario?.nombre || "")} y vuelve la pantalla para entrar con usuario y contraseña.</p>${pend}
+    <div class="grid2"><button class="btn" data-close>${meta.pending ? "Esperar" : "Cancelar"}</button><button class="btn primary" id="csok">Cerrar sesión</button></div></div>`);
+  $("#csok").onclick = salir;
+}
 const api = (path, body) => cuentaApi(meta.servidor, path, body, meta.cuenta?.token);
 const entrar = (base, usuario, password) => cuentaApi(base, "/api/cuentas/entrar", { usuario, password });
 async function guardarCuenta(c){ meta.cuenta = c; await LocalDB.setMeta("cuenta", c); Sync.state.token = c?.token || ""; }
@@ -2807,7 +2835,7 @@ function viewCuentas(){
   <div class="stack">
     <div class="card stack"><h3>Tu cuenta</h3>
       <div class="spread"><div><div style="font-weight:700">${esc(yo?.usuario?.nombre || "")}</div><div class="small muted">Usuario ${esc(yo?.usuario?.usuario || "")} · ${esc(ROLES[t?.rol] || "")}</div></div></div>
-      <div class="grid2"><button class="btn" id="cclave">Cambiar contraseña</button><button class="btn" id="csalir">Cambiar de usuario</button></div>
+      <div class="grid2"><button class="btn" id="cclave">Cambiar contraseña</button><button class="btn" id="csalir">Cerrar sesión</button></div>
     </div>
     ${puede("cuentas") ? `<div class="card stack"><div class="spread"><h3>Personas con acceso</h3><button class="btn sm" id="cadd">+ Agregar</button></div>
       <div class="list" id="clist"><div class="empty">Cargando…</div></div>
@@ -2831,13 +2859,7 @@ function bindCuentas(app){
     });
     return;
   }
-  $("#csalir").onclick = () => {
-    const salir = () => run(async () => { await guardarCuenta(null); closeModal(); render(); });
-    if (!meta.pending) return salir();
-    openModal(`<div class="stack"><h2>Hay cambios sin enviar</h2><p style="margin:0">Este dispositivo tiene ${meta.pending} cambios que todavía no llegan al servidor. Si cambias de usuario, se van a enviar con el usuario nuevo, y si no tiene permiso para alguno, ese cambio se pierde.</p>
-      <div class="grid2"><button class="btn" data-close>Esperar</button><button class="btn primary" id="csok">Cambiar igual</button></div></div>`);
-    $("#csok").onclick = salir;
-  };
+  $("#csalir").onclick = cerrarSesion;
   $("#cclave").onclick = () => { openModal(`<div class="stack"><div class="spread"><h2>Cambiar contraseña</h2><button class="btn ghost sm" data-close>Cerrar</button></div>
       <div class="field"><label for="ka">Contraseña actual</label><input class="input" id="ka" type="password" autocomplete="current-password"></div>
       <div class="field"><label for="kn">Contraseña nueva</label><input class="input" id="kn" type="password" autocomplete="new-password" placeholder="Al menos 6 caracteres"></div>

@@ -203,6 +203,10 @@ function formulario(){
     const nombre = $("#fn").value.trim(), tel = $("#ft").value.trim();
     if (nombre.length < 2) return err("Escribe tu nombre."), $("#fn").focus();
     if (tel.replace(/\D/g, "").length < 8) return err("Escribe tu celular."), $("#ft").focus();
+    // Aviso rápido con las reservas guardadas en este celular (el servidor igual revisa el límite)
+    const lim = T.porPersona || 3;
+    if (store.get(MIAS, []).filter(m => m.para === para && m.estado !== "rechazada").length >= lim)
+      return err(`Ya tienes ${lim === 1 ? "una reserva" : lim + " reservas"} para ${diaTxt(para)}. Si necesitas más, escríbele a la tienda.`);
     ui.sending = true; $("#fsend").disabled = true; $("#fsend").textContent = "Enviando…";
     try {
       const r = await api("/reserva", { method:"POST", headers:{ "Content-Type":"application/json" }, body:JSON.stringify({

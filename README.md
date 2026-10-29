@@ -65,7 +65,7 @@ Dispositivo A ─┐   POST /api/sync: envía su bandeja y recibe lo nuevo     �
 - `tienda.html?t=<pid>` muestra los productos con precio de una tienda y deja reservar. El `pid` es un código aparte del de la tienda: el link público no da acceso a los datos.
 - La app publica la vitrina en `POST /api/publico/publicar` cuando algo cambia (tabla `vitrinas`). Los clientes la leen en `GET /api/publico/<pid>`.
 - Una reserva (`POST /api/publico/<pid>/reserva`) entra a la tabla `cambios` como si viniera de un dispositivo más, así que llega sola a la app. El cliente consulta su estado con un código que solo tiene él.
-- Contra abusos: campo trampa para robots, tiempo mínimo en la página, celular chileno obligatorio, hasta 3 reservas por celular al día, máximo diario por tienda, límite por IP y números bloqueados.
+- Contra abusos: campo trampa para robots, tiempo mínimo en la página, celular chileno obligatorio, un límite de reservas por celular para un mismo día que elige la tienda (1, 2, 3 o 5; las rechazadas no cuentan), máximo diario por tienda, límite por IP y números bloqueados.
 - Por internet (Tailscale Funnel o Cloudflare) solo responden la app, la página, las reservas y la sincronización; el panel de PocketBase queda para el wifi.
 
 ## Cuentas y permisos (Fase 4)

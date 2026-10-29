@@ -93,7 +93,15 @@ routerAdd("POST", "/api/publico/{pid}/reserva", (e) => {
   }
   if (!items.length) throw new BadRequestError("Elige qué quieres reservar.");
 
-  if (!c.limite("tel:" + r.getString("pid") + ":" + tel, 3, 864e5)) throw new TooManyRequestsError("Ya hiciste varias reservas hoy. Si necesitas otra, escríbele a la tienda.");
+  // Reservas de este celular para ese día (las rechazadas no cuentan), contra el límite que eligió la tienda
+  const porPersona = Math.max(1, Math.min(5, +data.porPersona || 3));
+  const tienda = r.getString("tienda"), ultimas = {};
+  const filas = arrayOf(new DynamicModel({ value: "" }));
+  $app.db().newQuery("SELECT value FROM cambios WHERE tienda = {:t} AND store = 'reservas' AND json_extract(value, '$.tel') = {:tel} ORDER BY seq").bind({ t: tienda, tel: tel }).all(filas);
+  for (const f of filas) { try { const v = JSON.parse(f.value); ultimas[v.id] = v; } catch (err) {} }
+  const mismas = Object.keys(ultimas).filter((id) => ultimas[id].para === para && ultimas[id].estado !== "rechazada").length;
+  if (mismas >= porPersona) throw new TooManyRequestsError(`Ya tienes ${porPersona === 1 ? "una reserva" : porPersona + " reservas"} para ese día. Si necesitas más, escríbele a la tienda.`);
+  if (!c.limite("tel:" + r.getString("pid") + ":" + tel, porPersona + 5, 864e5)) throw new TooManyRequestsError("Ya hiciste varias reservas hoy. Si necesitas otra, escríbele a la tienda.");
   if (!c.limite("pid:" + r.getString("pid"), Math.max(1, +priv.maxDia || 40), 864e5)) throw new TooManyRequestsError("La tienda ya recibió todas las reservas que puede atender hoy.");
 
   const cant = (p, q) => String(q).replace(".", ",") + (p.kg ? " kg" : "");
