@@ -2340,6 +2340,9 @@ function viewDatos(){
       <p class="small muted" style="margin:0">Descarga una copia de todo en un archivo y guárdala en otro lugar (computador, Google Drive o WhatsApp a ti mismo). Conviene hacerlo una vez por semana.</p>
       <button class="btn block" id="backup">Descargar respaldo</button>
       <label class="btn block filebtn">Restaurar desde un respaldo<input type="file" id="restore" accept="application/json,.json"></label>
+      ${!meta.demo && meta.servidor ? `<div class="field" style="padding-top:8px"><label for="rcor">Respaldo diario por correo</label><input class="input" id="rcor" type="email" inputmode="email" autocomplete="email" value="${esc(S.ajustes.respaldo_correo || "")}" placeholder="Ej: mitienda.respaldos@gmail.com"></div>
+      <div class="grid2"><button class="btn" id="rcsave">Guardar correo</button><button class="btn" id="rctest" ${S.ajustes.respaldo_correo ? "" : "disabled"}>Mandar uno ahora</button></div>
+      <p class="small muted" style="margin:0">Cada noche el servidor manda a ese correo un archivo con todo, para que quede una copia fuera del computador del servidor. Si algún día se pierde todo, se restaura aquí con ese archivo. El servidor necesita tener el correo configurado (servidor/INSTRUCCIONES.md).</p>` : ""}
     </div>
     <div class="card stack" data-perm="config"><h3>Borrar todo</h3>
       <p class="small muted" style="margin:0">Borra la tienda y todos sus datos de este dispositivo. Descarga un respaldo antes.</p>
@@ -2381,9 +2384,12 @@ async function restoreBackup(input){
   const f = input.files?.[0]; input.value = ""; if (!f) return;
   let data; try { data = JSON.parse(await f.text()); } catch(e){ throw new Error("No se pudo leer el archivo"); }
   if (data?.app !== "mi-almacen") throw new Error("El archivo no es un respaldo de esta app");
-  const tienda = (data.tablas.meta || []).find(m => m.key === "tienda")?.value?.nombre || "la tienda";
+  // Los respaldos que llegan por correo vienen del servidor: traen la tienda, pero no los datos de un dispositivo
+  const delServidor = !data.tablas.meta && data.tienda?.id;
+  const tiendaMeta = delServidor ? data.tienda : (data.tablas.meta || []).find(m => m.key === "tienda")?.value;
+  const tienda = tiendaMeta?.nombre || "la tienda";
   if (MODE){
-    const otra = (data.tablas.meta || []).find(m => m.key === "tienda")?.value?.id !== meta.tienda?.id;
+    const otra = tiendaMeta?.id !== meta.tienda?.id;
     openModal(`<div class="stack"><h2>Restaurar el respaldo</h2>
       <p style="margin:0">Respaldo de <b>${esc(tienda)}</b> del ${esc(new Date(data.creado).toLocaleString("es-CL"))}.</p>
       ${otra ? `<p class="pill warn" style="white-space:normal;margin:0;padding:8px 10px">Este respaldo es de otra tienda. Si agregas sus datos, quedan mezclados con los de esta.</p>` : ""}
@@ -2400,7 +2406,16 @@ async function restoreBackup(input){
   openModal(`<div class="stack"><h2>¿Restaurar el respaldo?</h2>
     <p style="margin:0">Se reemplaza todo lo de este dispositivo por el respaldo de <b>${esc(tienda)}</b> del ${esc(new Date(data.creado).toLocaleString("es-CL"))}: ${(data.tablas.products || []).length} productos y ${(data.tablas.movs || []).length} movimientos.</p>
     <div class="grid2"><button class="btn" data-close>Cancelar</button><button class="btn primary" id="dorestore">Restaurar</button></div></div>`);
-  $("#dorestore").onclick = () => run(async () => { await LocalDB.importAll(data); closeModal(); await openStore(); toast("Respaldo restaurado"); });
+  $("#dorestore").onclick = () => run(async () => {
+    if (delServidor){
+      // Dispositivo nuevo: se crea con la misma tienda y todo entra a la bandeja de salida, para que llegue
+      // al servidor que se conecte después (por ejemplo, uno nuevo si se perdió el anterior)
+      await LocalDB.wipe(); const device = newDevice(); LocalDB.clock.device = device.id;
+      await LocalDB.setMeta("device", device); await LocalDB.setMeta("demo", false);
+      await LocalDB.setMeta("tienda", { id:data.tienda.id, nombre:data.tienda.nombre, persona:"", restaurada:Date.now() });
+      await LocalDB.apply(await LocalDB.missing(data));
+    } else await LocalDB.importAll(data);
+    closeModal(); await openStore(); toast("Respaldo restaurado"); });
 }
 function confirmWipe(after){
   openModal(`<div class="stack"><h2>¿Borrar todo?</h2>
@@ -2499,6 +2514,12 @@ function render(){
       await act.setting("tienda_nombre", n); meta.tienda = Object.assign({}, meta.tienda, { nombre:n }); await LocalDB.setMeta("tienda", meta.tienda); toast("Nombre guardado"); });
     $("#backup").onclick = () => run(downloadBackup);
     $("#restore").onchange = e => run(() => restoreBackup(e.target));
+    const rcs = $("#rcsave"); if (rcs) rcs.onclick = () => run(async () => { const v = $("#rcor").value.trim();
+      if (v && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)){ $("#rcor").focus(); return toast("Revisa el correo, por ejemplo nombre@gmail.com"); }
+      await act.setting("respaldo_correo", v); render(); toast(v ? "Correo guardado. El respaldo llega cada noche." : "Respaldo por correo apagado"); });
+    const rct = $("#rctest"); if (rct) rct.onclick = () => run(async () => { rct.disabled = true; rct.textContent = "Mandando…";
+      try { await Sync.syncNow(); const r = await api("/api/respaldo/correo", { tienda:meta.tienda.id }); toast(`Respaldo enviado a ${r.para}`); }
+      finally { rct.disabled = false; rct.textContent = "Mandar uno ahora"; } });
     $("#wipe").onclick = () => confirmWipe(showSetup);
     if (!meta.demo){
       $("#ssave").onclick = () => run(async () => {

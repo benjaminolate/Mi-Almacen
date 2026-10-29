@@ -141,7 +141,10 @@ async function exportAll(){
 async function importAll(file){
   if (!file || file.app !== "mi-almacen" || !file.tablas) throw new Error("El archivo no es un respaldo de esta app");
   const db = await open(), names = [...Object.keys(STORES), "outbox"], tx = db.transaction(names, "readwrite");
-  for (const s of names){ const st = tx.objectStore(s); st.clear(); (file.tablas[s] || []).forEach(v => st.put(v)); }
+  for (const s of names){
+    // Los respaldos que manda el servidor no traen los datos del dispositivo (meta): quedan los de este
+    if (s === "meta" && !file.tablas.meta) continue;
+    const st = tx.objectStore(s); st.clear(); (file.tablas[s] || []).forEach(v => st.put(v)); }
   await done(tx);
 }
 // Restaurar sin borrar: los registros del respaldo que no existen aquí, listos para guardar con apply()

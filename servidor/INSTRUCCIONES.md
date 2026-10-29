@@ -59,6 +59,21 @@ Para volver a una copia: entra a `http://localhost:8090/_/` con la cuenta de adm
 
 Aparte, desde la app (**Más → Tienda y datos**) puedes descargar un respaldo a tu teléfono. Al restaurarlo puedes elegir **Agregar lo que falta**, que no borra nada de lo que ya hay.
 
+### Respaldo por correo (una copia fuera del computador)
+
+Las copias de arriba quedan en el mismo computador: si se echa a perder el disco, se pierden junto con todo lo demás. Por eso conviene que además llegue cada noche un correo con el respaldo de la tienda (a las 01:30 en verano y a las 00:30 en invierno, hora de Chile). Se configura una sola vez, en unos 10 minutos:
+
+1. **Prepara un Gmail.** Conviene uno solo para esto (por ejemplo `mitienda.respaldos@gmail.com`). En [myaccount.google.com/security](https://myaccount.google.com/security) activa la **Verificación en 2 pasos**. Después, en [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords), crea una **contraseña de aplicación** llamada "Mi Almacén" y copia las 16 letras. No es la contraseña normal del Gmail.
+2. **Configura el correo en el servidor.** Entra a `http://localhost:8090/_/` → **Settings → Mail settings**:
+   - **Sender name**: el nombre de la tienda. **Sender address**: el Gmail del paso 1.
+   - Activa **Use SMTP mail server**. **SMTP server host**: `smtp.gmail.com`, **Port**: `587`, **Username**: el Gmail, **Password**: las 16 letras.
+   - Guarda con **Save changes**. Con **Send test email** puedes comprobar que funciona.
+3. **Elige el correo en la app.** En **Más → Tienda y datos → Respaldo**, escribe el correo que debe recibir los respaldos (puede ser el mismo Gmail o el tuyo) y toca **Guardar correo**. Con **Mandar uno ahora** llega uno de inmediato para probar.
+
+Para recuperar los datos, en la app ve a **Más → Tienda y datos → Restaurar desde un respaldo** y elige el archivo `.json` del correo. En un dispositivo nuevo, la tienda queda creada con todo y, al conectarla a un servidor, se le envía lo restaurado. Si el servidor se perdió, puedes conectarla a uno nuevo.
+
+El servidor solo manda respaldos mientras está prendido. Si una noche estaba apagado, ese día no llega correo.
+
 ## 7. Conectar el servidor a internet (gratis, con candado)
 
 Sirve para tres cosas: que tus clientes abran la **página de la tienda** desde su casa, que los celulares de la tienda sincronicen **fuera del wifi**, y que en el celular funcionen la **cámara en vivo** y la **instalación** de la app (necesitan candado, https).
@@ -120,4 +135,6 @@ Si olvidas tu contraseña de dueño, entra al panel `http://localhost:8090/_/` d
 | Arriba dice "Sin servidor" | La ventana del servidor está cerrada o el computador cambió de IP. Préndelo de nuevo; los cambios se envían solos. |
 | "El servidor no tiene datos de esa tienda" al unirse | El link se copió incompleto. Vuelve a enviarlo desde el computador. |
 | Los clientes ven "No se pudo conectar con la tienda" | El computador o el servidor están apagados, o Tailscale está cerrado. |
+| "El servidor todavía no tiene configurado el correo" | Falta el paso 2 de **Respaldo por correo**. |
+| No llega el respaldo por correo | En el panel, **Settings → Mail settings → Send test email**. Si falla, revisa la contraseña de aplicación de 16 letras y que el Gmail tenga la verificación en 2 pasos. Mira también la carpeta de spam. |
 | La dirección `https://...ts.net` no abre | Revisa que Tailscale esté conectado en el computador y vuelve a escribir `tailscale funnel --bg 8090`. |
