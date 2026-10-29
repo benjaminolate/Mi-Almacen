@@ -458,7 +458,7 @@ function stockOf(p){
 function pendingSales(p){ return S.movs.filter(m => m.pid === p.id && m.type === "venta").reduce((a,m)=>a+m.qty,0); }
 function ago(t){
   const d0 = new Date(); d0.setHours(0,0,0,0);
-  const hm = new Date(t).toLocaleTimeString("es-CL",{hour:"2-digit",minute:"2-digit"});
+  const hm = new Date(t).toLocaleTimeString("es-CL",{hour:"2-digit",minute:"2-digit",hourCycle:"h23"});
   if (t >= d0.getTime()) return "hoy " + hm;
   if (t >= d0.getTime() - D) return "ayer " + hm;
   if (t >= d0.getTime() - 6*D) return new Date(t).toLocaleDateString("es-CL",{weekday:"long"}) + " " + hm;
@@ -480,6 +480,17 @@ function friendly(e){
   if (e?.name === "QuotaExceededError") return "El dispositivo se quedó sin espacio. Libera espacio y vuelve a intentar.";
   return m || "Algo salió mal";
 }
+// Celular chileno: 9 números (se acepta con +56 delante). Vacío es válido porque es opcional.
+const phoneOk = v => { const d = String(v || "").replace(/\D/g, ""); return !d || d.length === 9 || (d.length === 11 && d.startsWith("56")); };
+const PHONE_MSG = "El celular debe tener 9 números, por ejemplo 9 1234 5678";
+// Mientras se escribe solo deja números, espacios y el + del comienzo
+function phoneInput(el){ if (el) el.addEventListener("input", () => { const v = el.value.replace(/[^\d +]/g, "").replace(/(?!^)\+/g, ""); if (v !== el.value) el.value = v; }); }
+// Unidades por caja: vacío = sin dato (0); si no, un número entero entre 2 y 1000
+const CAJA_MSG = "Las unidades por caja deben ser un número entero entre 2 y 1000. Déjalo vacío si no viene en caja.";
+const cajaVal = v => { v = String(v ?? "").trim(); if (!v) return 0; const n = +v; return Number.isInteger(n) && n >= 2 && n <= 1000 ? n : undefined; };
+// Lo que se vende por unidad va en números enteros (los decimales son solo para lo que va por kilo)
+const enteroOk = (p, v) => p?.kg || v === "" || v == null || Number.isInteger(num(v));
+const MAX_FIADO = 1000000;
 let busy = false;
 async function run(fn){ if (busy) return; busy = true; try { return await fn(); } catch(e){ console.error(e); toast(friendly(e)); } finally { busy = false; } }
 
@@ -883,7 +894,8 @@ function viewVender(){
     <div class="list card" id="res" style="padding-block:0" hidden></div>
     <div class="card">
       <h3>Venta actual</h3>
-      ${ui.cart.length ? pr.lines.map((l,i) => { const p = P(l.pid); return `<div class="cartline"><div style="min-width:0"><div class="name" style="font-weight:600">${esc(p.name)}</div><div class="small muted">${clp(p.price)} ${p.kg ? "el kilo" : "c/u"}${l.desc ? ` · <span style="color:var(--ok);font-weight:600">oferta −${clp(l.desc)}</span>` : ""}</div></div>
+      ${ui.cart.length ? pr.lines.map((l,i) => { const p = P(l.pid); return `<div class="cartline"><div style="min-width:0"><div class="name" style="font-weight:600">${esc(p.name)}</div><div class="small muted">${clp(p.price)} ${p.kg ? "el kilo" : "c/u"}${l.desc ? ` · <span style="color:var(--ok);font-weight:600">oferta −${clp(l.desc)}</span>` : ""}</div>
+        ${(st => st != null && l.qty > st ? `<div class="small" style="color:var(--warn);font-weight:600">Según el sistema ${st > 0 ? `quedan ${fq(p, st)}` : "no quedan"}. Revisa la cantidad.</div>` : "")(stockOf(p))}</div>
         ${p.kg ? `<div class="stepper"><button data-w="${i}" style="width:auto;padding:0 10px" aria-label="Cambiar el peso">${fq(p, l.qty)}</button><button data-rm="${i}" aria-label="Quitar">×</button></div>`
           : `<div class="stepper"><button data-dec="${i}" aria-label="Quitar uno">−</button><span>${l.qty}</span><button data-inc="${i}" aria-label="Agregar uno">+</button></div>`}<div style="font-weight:700;min-width:6ch;text-align:right">${clp(l.bruto - l.desc)}</div></div>`; }).join("")
         : `<div class="empty">Busca o escanea un producto para agregarlo.</div>`}
@@ -920,11 +932,11 @@ function viewRecibir(){
     <div class="card">
       <h3>Productos recibidos</h3>
       ${ui.recv.items.length ? ui.recv.items.map((l,i) => { const p = P(l.pid), s = stockOf(p), cj = l.caja; return `<div class="countrow" style="grid-template-columns:1fr 80px 96px"><div style="min-width:0"><div style="font-weight:600">${esc(p.name)}</div><div class="small muted">Stock actual: ${s == null ? "sin contar" : fq(p, s)}${l.cost > 0 ? "" : ' · <span class="pill warn">Sin costo</span>'}</div></div>
-        <input class="input" type="number" min="0" ${p.kg ? `step="any" inputmode="decimal"` : `inputmode="numeric"`} value="${l.qty}" data-rq="${i}" aria-label="Cantidad${p.kg ? " en kilos" : ""}" ${cj ? "disabled" : ""}>
+        <input class="input" type="number" min="0" ${p.kg ? `step="any" inputmode="decimal"` : `step="1" inputmode="numeric"`} value="${l.qty}" data-rq="${i}" aria-label="Cantidad${p.kg ? " en kilos" : ""}" ${cj ? "disabled" : ""}>
         <input class="input" type="number" min="0" inputmode="numeric" value="${l.cost}" data-rc="${i}" aria-label="Costo ${p.kg ? "por kilo" : "unitario"}" ${cj ? "disabled" : ""}>
         ${p.kg ? "" : `<div class="opts"><label><input type="checkbox" data-rcaja="${i}" ${cj ? "checked" : ""}> Por caja</label>
           ${cj ? `<input class="input" type="number" min="0" inputmode="numeric" data-rcn="${i}" value="${cj.n || ""}" placeholder="cajas" aria-label="Cajas" style="width:64px;font-size:14px;padding:6px">
-          × <input class="input" type="number" min="0" inputmode="numeric" data-rcu="${i}" value="${cj.por || ""}" placeholder="unid." aria-label="Unidades por caja" style="width:64px;font-size:14px;padding:6px">
+          × <input class="input" type="number" min="2" max="1000" step="1" inputmode="numeric" data-rcu="${i}" value="${cj.por || ""}" placeholder="unid." aria-label="Unidades por caja" style="width:64px;font-size:14px;padding:6px">
           a <input class="input" type="number" min="0" inputmode="numeric" data-rcp="${i}" value="${cj.precio || ""}" placeholder="$ caja" aria-label="Precio de la caja" style="width:88px;font-size:14px;padding:6px">` : ""}</div>`}
         ${ext("vencimientos") ? `<div class="opts"><label for="rv${i}">Vence el</label><input class="input" type="date" id="rv${i}" data-rv="${i}" value="${esc(l.vence || "")}" style="width:auto;text-align:left;font-weight:400;font-size:14px;padding:6px 8px"><span class="muted">opcional</span></div>` : ""}</div>`; }).join("") +
         `<div class="row small muted" style="justify-content:flex-end;gap:24px;padding-top:6px"><span>cantidad</span><span>costo c/u</span></div>`
@@ -982,24 +994,30 @@ function openCantidad(p){
     <div class="field"><label for="ctot">Cantidad${p.kg ? " en kilos" : ""}</label><input class="input" id="ctot" type="number" min="0" ${p.kg ? 'step="any" inputmode="decimal"' : 'inputmode="numeric"'} value="${esc(d.qty ?? "")}" style="font-size:22px;font-weight:700;text-align:center"></div>
     ${p.kg ? "" : `<div><h3>O por cajas</h3><div class="row" style="flex-wrap:nowrap;gap:6px;align-items:end;padding-top:6px">
       <div class="field" style="flex:1"><label for="ccj">Cajas</label><input class="input" id="ccj" type="number" min="0" inputmode="numeric"></div><span style="padding-bottom:10px">×</span>
-      <div class="field" style="flex:1"><label for="ccu">Unidades</label><input class="input" id="ccu" type="number" min="0" inputmode="numeric" value="${p.porCaja || ""}"></div><span style="padding-bottom:10px">+</span>
+      <div class="field" style="flex:1"><label for="ccu">Unidades</label><input class="input" id="ccu" type="number" min="2" max="1000" step="1" inputmode="numeric" value="${p.porCaja || ""}"></div><span style="padding-bottom:10px">+</span>
       <div class="field" style="flex:1"><label for="ccs">Sueltas</label><input class="input" id="ccs" type="number" min="0" inputmode="numeric"></div></div></div>`}
     <button class="btn primary block" id="cok">Listo</button>
   </div>`);
   const cajas = () => { const t = Math.round(+$("#ccj").value || 0) * Math.round(+$("#ccu").value || 0) + Math.round(+$("#ccs").value || 0); if ($("#ccj").value || $("#ccs").value) $("#ctot").value = t; };
   if (!p.kg) ["#ccj","#ccu","#ccs"].forEach(id => $(id).oninput = cajas);
-  const ok = () => run(async () => { const v = $("#ctot").value; const dd = (ui.draft[p.id] ||= {}); dd.qty = v; dd.none = false;
-    const por = p.kg ? 0 : Math.round(+$("#ccu").value || 0); if (por && por !== p.porCaja && $("#ccj").value) await act.updateProduct(p, { porCaja:por });
+  const ok = () => run(async () => { const v = $("#ctot").value;
+    if (num(v) < 0){ $("#ctot").focus(); return toast("La cantidad no puede ser negativa"); }
+    if (!enteroOk(p, v)){ $("#ctot").focus(); return toast(`${p.name} se cuenta por unidad: escribe un número entero`); }
+    const por = p.kg || !$("#ccj").value ? 0 : cajaVal($("#ccu").value); if (por === undefined){ $("#ccu").focus(); return toast(CAJA_MSG); }
+    const dd = (ui.draft[p.id] ||= {}); dd.qty = v; dd.none = false;
+    if (por && por !== p.porCaja) await act.updateProduct(p, { porCaja:por });
     closeModal(); rerender(); });
   $("#cok").onclick = ok; $("#ctot").onkeydown = e => { if (e.key === "Enter") ok(); }; setTimeout(() => $(p.kg || !p.porCaja ? "#ctot" : "#ccj")?.focus(), 50);
 }
 function finishCount(){ run(async () => {
+  const bad = Object.entries(ui.draft).map(([id, d]) => [P(id), d]).find(([p, d]) => p && !d.none && (num(d.qty) < 0 || !enteroOk(p, d.qty)));
+  if (bad){ $(`[data-cq="${bad[0].id}"]`)?.focus(); return toast(num(bad[1].qty) < 0 ? `${bad[0].name}: la cantidad no puede ser negativa` : `${bad[0].name} se cuenta por unidad: escribe un número entero`); }
   const { n, diffs } = await act.count(ui.draft);
   const now = Date.now();
   ui.draft = {};
   const sector = ui.sector;
   openModal(`<div class="stack"><h2>Conteo guardado</h2>
-    <p style="margin:0">${n} productos de ${esc(sector)} quedaron al día desde ahora (${new Date(now).toLocaleTimeString("es-CL",{hour:"2-digit",minute:"2-digit"})}). Las ventas que hagan desde este momento se descuentan solas.</p>
+    <p style="margin:0">${n} productos de ${esc(sector)} quedaron al día desde ahora (${new Date(now).toLocaleTimeString("es-CL",{hour:"2-digit",minute:"2-digit",hourCycle:"h23"})}). Las ventas que hagan desde este momento se descuentan solas.</p>
     ${diffs.length ? `<div class="card"><h3>Diferencias con lo que esperaba el sistema</h3><div class="list">${diffs.map(([p,e,q]) => `<div class="item"><div class="main"><div class="name">${esc(p.name)}</div><div class="sub">Esperaba ${e}, contaste ${q}</div></div><span class="pill ${q<e?"bad":"ok"}">${q<e?`Faltan ${e-q}`:`Sobran ${q-e}`}</span></div>`).join("")}</div>
       <p class="small muted" style="margin:8px 0 0">Las faltas quedan registradas como merma (vencidos, robo o ventas sin registrar).</p></div>` : ""}
     <button class="btn primary block" data-close>Listo</button></div>`);
@@ -1030,11 +1048,11 @@ function openProduct(p){
     <div class="spread"><h2>${esc(p.name)}</h2><button class="btn ghost sm" data-close>Cerrar</button></div>
     <div class="row">${stockPill(p)}<span class="small muted">${p.countAt ? "Contado " + ago(p.countAt) : "Aún no se cuenta"}</span></div>
     <div class="grid2">
-      <div class="field"><label for="ep">Precio venta${p.kg ? " (kilo)" : ""}</label><input class="input" id="ep" type="number" value="${p.price}"></div>
-      <div class="field"><label for="ec">Costo${p.kg ? " (kilo)" : ""}</label><input class="input" id="ec" type="number" value="${p.cost}"></div>
-      <div class="field"><label for="em">Stock mínimo${p.kg ? " (kg)" : ""}</label><input class="input" id="em" type="number" step="any" value="${p.min}"></div>
+      <div class="field"><label for="ep">Precio venta${p.kg ? " (kilo)" : ""}</label><input class="input" id="ep" type="number" min="0" inputmode="numeric" value="${p.price}"></div>
+      <div class="field"><label for="ec">Costo${p.kg ? " (kilo)" : ""}</label><input class="input" id="ec" type="number" min="0" inputmode="numeric" value="${p.cost}"></div>
+      <div class="field"><label for="em">Stock mínimo${p.kg ? " (kg)" : ""}</label><input class="input" id="em" type="number" min="0" ${p.kg ? 'step="any" inputmode="decimal"' : 'step="1" inputmode="numeric"'} value="${p.min}"></div>
       <div class="field"><label for="eb">Código de barras</label><input class="input code" id="eb" value="${esc(p.barcode)}" placeholder="Sin código"></div>
-      ${p.kg ? "" : `<div class="field"><label for="epc">Unidades por caja</label><input class="input" id="epc" type="number" min="0" inputmode="numeric" value="${p.porCaja || ""}" placeholder="Opcional"></div>`}
+      ${p.kg ? "" : `<div class="field"><label for="epc">Unidades por caja</label><input class="input" id="epc" type="number" min="2" max="1000" step="1" inputmode="numeric" value="${p.porCaja || ""}" placeholder="Opcional"></div>`}
       <div class="field"><label for="esec">Sector</label><input class="input" id="esec" list="seclist2" value="${esc(p.cat)}" autocomplete="off"><datalist id="seclist2">${[...new Set([...sectores(), ...ORDEN_SECTORES])].map(c => `<option value="${esc(c)}">`).join("")}</datalist></div>
     </div>
     <div class="field"><label for="en">Nombre</label><input class="input" id="en" value="${esc(p.name)}"></div>
@@ -1048,10 +1066,11 @@ function openProduct(p){
   </div>`);
   $("#esave").onclick = () => run(async () => {
     const f = { price:+$("#ep").value||0, cost:+$("#ec").value||0, min:num($("#em").value), barcode:$("#eb").value.trim(), name:$("#en").value.trim() || p.name };
+    if (f.price < 0 || f.cost < 0 || f.min < 0) return toast("El precio, el costo y el stock mínimo no pueden ser negativos");
     if ($("#eprov")) f.prov = $("#eprov").value;
     if ($("#ekg")) f.kg = $("#ekg").checked;
     f.atajo = $("#eat").checked; f.has = $("#ehas").checked; f.cat = $("#esec").value.trim() || p.cat;
-    if ($("#epc")) f.porCaja = Math.round(+$("#epc").value || 0);
+    if ($("#epc")){ f.porCaja = cajaVal($("#epc").value); if (f.porCaja === undefined){ $("#epc").focus(); return toast(CAJA_MSG); } }
     Object.assign(f, cambioUnidad(p, f.kg));
     await act.updateProduct(p, f);
     closeModal(); toast("Producto actualizado"); render(); });
@@ -1066,9 +1085,9 @@ function openProductForm(sector, code, cb){
     <div class="grid2">
       <div class="field"><label for="ns">Sector</label><input class="input" id="ns" list="seclist" value="${esc(sector || ui.sector || "")}" placeholder="Ej: Bebidas" autocomplete="off">
         <datalist id="seclist">${[...new Set([...sectores(), ...ORDEN_SECTORES])].map(c => `<option value="${esc(c)}">`).join("")}</datalist></div>
-      <div class="field"><label for="np">Precio venta</label><input class="input" id="np" type="number" inputmode="numeric" placeholder="0"></div>
+      <div class="field"><label for="np">Precio venta</label><input class="input" id="np" type="number" min="0" inputmode="numeric" placeholder="0"></div>
       <div class="field"><label for="nb">Código de barras</label><input class="input code" id="nb" value="${esc(code||"")}" placeholder="Opcional"></div>
-      <div class="field"><label for="nq">Cantidad ahora</label><input class="input" id="nq" type="number" step="any" inputmode="decimal" placeholder="Opcional"></div>
+      <div class="field"><label for="nq">Cantidad ahora</label><input class="input" id="nq" type="number" min="0" step="any" inputmode="decimal" placeholder="Opcional"></div>
     </div>
     ${ext("granel") ? `<label class="row small"><input type="checkbox" id="nkg"> Se vende por kilo (a granel): el precio y la cantidad van en kilos</label>` : ""}
     <p class="small muted" style="margin:0">Si escribes la cantidad, el producto queda contado desde este momento.</p>
@@ -1076,6 +1095,9 @@ function openProductForm(sector, code, cb){
   </div>`);
   $("#nsave").onclick = () => run(async () => {
     const name = $("#nn").value.trim(); if (!name){ $("#nn").focus(); return; }
+    if (+$("#np").value < 0){ $("#np").focus(); return toast("El precio no puede ser negativo"); }
+    if (num($("#nq").value) < 0){ $("#nq").focus(); return toast("La cantidad no puede ser negativa"); }
+    if (!$("#nkg")?.checked && !enteroOk(null, $("#nq").value)){ $("#nq").focus(); return toast("Por unidad, la cantidad va sin decimales"); }
     const p = await act.newProduct({ name, cat:$("#ns").value.trim() || "Otros", price:+$("#np").value || 0, barcode:$("#nb").value.trim(), kg:!!$("#nkg")?.checked }, $("#nq").value);
     closeModal(); toast(`${name} agregado`);
     if (cb) cb(p); else render();
@@ -1147,6 +1169,10 @@ function openCliente(c){
       <span class="diff" style="color:${i.type === "fiado" ? "var(--bad)" : "var(--ok)"}">${i.type === "fiado" ? "+" : "−"}${clp(i.amount)}</span></div>`).join("") || `<div class="empty">Sin movimientos.</div>`}</div></div>
   </div>`);
   const add = type => run(async () => { const a = Math.round(+$("#fm").value || 0); if (a <= 0){ $("#fm").focus(); return; }
+    if (a > MAX_FIADO){ $("#fm").focus(); return toast(`Revisa el monto: el máximo por anotación es ${clp(MAX_FIADO)}`); }
+    const debe = saldo(c);
+    if (type === "abono" && debe <= 0){ $("#fm").focus(); return toast(`${c.name.split(" ")[0]} no debe nada`); }
+    if (type === "abono" && a > debe){ $("#fm").value = debe; $("#fm").focus(); return toast(`Debe ${clp(debe)}: el pago no puede ser mayor. Si pagó con más, dale el vuelto.`); }
     await act.clientMov(c, type, a, $("#fn").value.trim()); toast(type === "fiado" ? `Fiado anotado: ${clp(a)}` : `Pago registrado: ${clp(a)}`); render(); openCliente(c); });
   $("#addFiado").onclick = () => add("fiado");
   $("#addAbono").onclick = () => add("abono");
@@ -1155,9 +1181,11 @@ function openNewClient(){
   openModal(`<div class="stack">
     <div class="spread"><h2>Nuevo cliente</h2><button class="btn ghost sm" data-close>Cerrar</button></div>
     <div class="field"><label for="cn">Nombre</label><input class="input" id="cn" placeholder="Ej: Ana Ejemplo"></div>
-    <div class="field"><label for="cp">Celular (para recordatorios)</label><input class="input" id="cp" inputmode="tel" placeholder="9 XXXX XXXX"></div>
+    <div class="field"><label for="cp">Celular (para recordatorios)</label><input class="input" id="cp" type="tel" inputmode="tel" autocomplete="off" maxlength="16" placeholder="9 1234 5678"></div>
     <button class="btn primary block" id="csave">Guardar cliente</button></div>`);
+  phoneInput($("#cp"));
   $("#csave").onclick = () => run(async () => { const name = $("#cn").value.trim(); if (!name){ $("#cn").focus(); return; }
+    if (!phoneOk($("#cp").value)){ $("#cp").focus(); return toast(PHONE_MSG); }
     const c = await act.newClient(name, $("#cp").value.trim()); render(); openCliente(c); });
 }
 
@@ -1552,7 +1580,7 @@ function openOferta(o, preset){
       <div class="spread"><h2>${nuevo ? "Nueva oferta" : "Editar oferta"}</h2><button class="btn ghost sm" data-close>Cerrar</button></div>
       <div class="field"><label for="ofn">Nombre</label><input class="input" id="ofn" value="${esc(d.nombre)}" placeholder="Ej: 3 galletas por $1.500"></div>
       <div class="seg" role="group"><button data-oft="pack" aria-pressed="${d.tipo === "pack"}">Pack: varios por un precio</button><button data-oft="descuento" aria-pressed="${d.tipo === "descuento"}">Descuento en %</button></div>
-      ${d.tipo === "pack" ? `<div class="grid2"><div class="field"><label for="ofq">¿Cuántos?</label><input class="input" id="ofq" type="number" min="2" inputmode="numeric" value="${esc(d.n)}"></div>
+      ${d.tipo === "pack" ? `<div class="grid2"><div class="field"><label for="ofq">¿Cuántos?</label><input class="input" id="ofq" type="number" min="2" max="100" inputmode="numeric" value="${esc(d.n)}"></div>
         <div class="field"><label for="ofp">Precio por todos</label><input class="input" id="ofp" type="number" min="0" inputmode="numeric" value="${esc(d.precio)}" placeholder="Ej: 1500"></div></div>
         <p class="small muted" style="margin:0">Se pueden mezclar los productos elegidos: 2 de chocolate y 1 de vainilla también forman el pack.</p>`
       : `<div class="field"><label for="ofpct">Descuento (%)</label><input class="input" id="ofpct" type="number" min="1" max="100" inputmode="numeric" value="${esc(d.pct)}"></div>`}
@@ -1574,7 +1602,12 @@ function openOferta(o, preset){
     $("#ofsave").onclick = () => run(async () => { keep();
       if (d.tipo === "pack"){ d.precio = Math.round(+d.precio || 0);
         if (!d.pids.length) return toast("Elige los productos del pack");
-        if (d.n < 2 || d.precio <= 0) return toast("Escribe cuántos y el precio del pack"); }
+        if (d.n < 2 || d.precio <= 0) return toast("Escribe cuántos y el precio del pack");
+        if (d.n > 100){ $("#ofq").focus(); return toast("El pack puede tener hasta 100 unidades"); }
+        // Si se mezclan productos, el pack tiene que convenir incluso llevando solo el más barato
+        const base = d.pids.map(P).filter(p => p?.price > 0).sort((a, b) => a.price - b.price)[0];
+        if (base && d.precio >= base.price * d.n){ $("#ofp").focus();
+          return toast(`El pack tiene que costar menos de ${clp(base.price * d.n)}, que es lo que valen ${d.n}${d.pids.length > 1 ? " del más barato" : ""} por separado`); } }
       else if (!(d.pct > 0 && d.pct <= 100)) return toast("El descuento va de 1 a 100%");
       if ((d.desde && !d.hasta) || (!d.desde && d.hasta)) return toast("Escribe las dos horas, o ninguna");
       if (!d.nombre.trim()) d.nombre = d.tipo === "pack" ? `${d.n} por ${clp(d.precio)}` : `${d.pct}% de descuento`;
@@ -1593,7 +1626,7 @@ function comprobanteTexto(g){
   const ms = ventaGrupo(g); if (!ms.length) return "";
   const tot = ms.reduce((a, m) => a + m.qty * m.price, 0), desc = ms.reduce((a, m) => a + (m.desc || 0), 0);
   const lines = ms.map(m => { const p = P(m.pid); return `${fq(p, m.qty)} x ${p?.name || "Producto"}  ${clp(m.qty * (m.lista ?? m.price))}`; });
-  return [`*${S.ajustes.tienda_nombre || "Mi Almacén"}*`, new Date(ms[0].at).toLocaleString("es-CL", { dateStyle:"short", timeStyle:"short" }), "",
+  return [`*${S.ajustes.tienda_nombre || "Mi Almacén"}*`, new Date(ms[0].at).toLocaleString("es-CL", { dateStyle:"short", timeStyle:"short", hourCycle:"h23" }), "",
     ...lines, ...(desc ? [`Descuentos  −${clp(desc)}`] : []), "", `*Total: ${clp(tot)}*`,
     ...(ms[0].pago ? [`Pago: ${PAGOS[ms[0].pago]}`] : []), ...(ms[0].quien && nombrePersona(ms[0].quien) ? [`Atendió: ${nombrePersona(ms[0].quien)}`] : []),
     "", "¡Gracias por su compra!", "Comprobante sin valor tributario"].join("\n");
@@ -1604,12 +1637,12 @@ function openComprobante(g){
   openModal(`<div class="stack">
     <div class="spread"><h2>Comprobante</h2><button class="btn ghost sm" data-close>Cerrar</button></div>
     <pre class="receipt">${esc(plano)}</pre>
-    <div class="field"><label for="rtel">Celular del cliente (opcional)</label><input class="input" id="rtel" inputmode="tel" placeholder="9 XXXX XXXX"></div>
+    <div class="field"><label for="rtel">Celular del cliente (opcional)</label><input class="input" id="rtel" type="tel" inputmode="tel" autocomplete="off" maxlength="16" placeholder="9 1234 5678"></div>
     <a class="btn primary block" id="rwa" style="text-align:center" href="${esc(waLink("", txt))}" ${WA_TARGET}>Enviar por WhatsApp</a>
     <div class="grid2"><button class="btn" id="rprint">Imprimir</button><button class="btn" id="rcopy">Copiar</button></div>
     <p class="small muted" style="margin:0">Es un detalle de la compra para el cliente. No reemplaza la boleta del SII.</p>
   </div>`);
-  $("#rtel").oninput = e => { $("#rwa").href = waLink(e.target.value.trim(), txt); };
+  phoneInput($("#rtel")); $("#rtel").oninput = e => { $("#rwa").href = waLink(e.target.value.trim(), txt); };
   $("#rprint").onclick = () => { $("#print").textContent = plano; window.print(); };
   $("#rcopy").onclick = () => copiar(plano, "Comprobante copiado");
 }
@@ -1642,7 +1675,7 @@ function viewCaja(){
   const inp = (id, k, label) => `<div class="field"><label for="${id}">${label}</label><input class="input" id="${id}" data-kk="${k}" type="number" min="0" inputmode="numeric" value="${esc(c[k] ?? "")}" placeholder="0"></div>`;
   return `${header("Cierre de caja", "Lo vendido contra lo que hay en la caja")}
   <div class="stack">
-    <div class="card stack"><div class="spread"><h3>Vendido desde ${esc(ago(desde))}</h3><span class="small muted">${x.ventas} ${x.ventas === 1 ? "venta" : "ventas"}</span></div>
+    <div class="card stack"><div class="spread"><h3>${desde === new Date().setHours(0,0,0,0) ? "Vendido desde las 00:00 de hoy" : "Vendido desde el último cierre, " + esc(ago(desde))}</h3><span class="small muted">${x.ventas} ${x.ventas === 1 ? "venta" : "ventas"}</span></div>
       <div class="list">${Object.entries(PAGOS).map(([k, v]) => `<div class="item"><div class="main"><div class="name">${v}</div></div><div style="font-weight:700">${clp(x.e[k])}</div></div>`).join("")}
         ${x.abonos ? `<div class="item"><div class="main"><div class="name">Pagos de fiados</div><div class="sub">Se cuentan como efectivo</div></div><div style="font-weight:700">${clp(x.abonos)}</div></div>` : ""}</div></div>
     <div class="card stack"><h3>Cuenta la caja</h3>
@@ -1800,7 +1833,7 @@ function openProveedor(pr){
     <div class="grid2"><div class="field"><label for="pvm">Monto</label><input class="input" id="pvm" type="number" inputmode="numeric" placeholder="0"></div><div class="field"><label for="pvn">Detalle (opcional)</label><input class="input" id="pvn" placeholder="Ej: factura 1234"></div></div>
     <div class="grid2"><button class="btn primary" id="pvf">Anotar factura</button><button class="btn" id="pvp">Registrar pago</button></div>`}
     <div class="field"><label for="pvnom">Nombre</label><input class="input" id="pvnom" value="${esc(pr.nombre)}" placeholder="Ej: Distribuidora Sur"></div>
-    <div class="field"><label for="pvtel">Celular o teléfono</label><input class="input" id="pvtel" inputmode="tel" value="${esc(pr.telefono || "")}" placeholder="9 XXXX XXXX"></div>
+    <div class="field"><label for="pvtel">Celular o teléfono</label><input class="input" id="pvtel" type="tel" inputmode="tel" autocomplete="off" maxlength="16" value="${esc(pr.telefono || "")}" placeholder="9 1234 5678"></div>
     <div class="field"><label>Días que pasa</label><div class="chips" style="flex-wrap:wrap">${ORDEN_DIAS.map(d => `<button class="chip" data-pvd="${d}" aria-pressed="${dias.has(d)}">${DIAS[d]}</button>`).join("")}</div></div>
     <div class="field"><label for="pvnota">Nota</label><input class="input" id="pvnota" value="${esc(pr.nota || "")}" placeholder="Ej: hacer el pedido el martes antes de las 12"></div>
     <button class="btn ${nuevo ? "primary" : ""} block" id="pvsave">${nuevo ? "Guardar proveedor" : "Guardar datos"}</button>
@@ -1811,7 +1844,9 @@ function openProveedor(pr){
   const again = () => openProveedor(S.proveedores.find(x => x.id === pr.id));
   const lb = $("#pvlote"); if (lb) lb.onclick = () => openProvProductos(pr);
   document.querySelectorAll("[data-pvd]").forEach(b => b.onclick = () => { const d = +b.dataset.pvd; dias.has(d) ? dias.delete(d) : dias.add(d); b.setAttribute("aria-pressed", dias.has(d)); });
+  phoneInput($("#pvtel"));
   $("#pvsave").onclick = () => run(async () => { const nombre = $("#pvnom").value.trim(); if (!nombre) return $("#pvnom").focus();
+    if (!phoneOk($("#pvtel").value)){ $("#pvtel").focus(); return toast(PHONE_MSG); }
     await act.put("proveedores", [Object.assign({}, pr, { nombre, telefono:$("#pvtel").value.trim(), dias:[...dias].sort(), nota:$("#pvnota").value.trim() })]);
     toast(nuevo ? "Proveedor agregado" : "Datos guardados"); render(); again(); });
   if (!nuevo){ const mov = type => run(async () => { const a = Math.round(+$("#pvm").value || 0); if (a <= 0) return $("#pvm").focus();
@@ -1881,7 +1916,7 @@ function openEncargo(e){
     ${nuevo ? "" : `<div class="seg" role="group">${Object.entries(ESTADOS).map(([k, v]) => `<button data-est="${k}" aria-pressed="${e.estado === k}">${v}</button>`).join("")}</div>
       ${e.telefono && e.estado !== "entregado" ? `<a class="btn block" style="text-align:center" href="${esc(waLink(e.telefono, msg))}" ${WA_TARGET}>Avisar por WhatsApp que está listo</a>` : ""}`}
     <div class="grid2"><div class="field"><label for="ecl">Cliente</label><input class="input" id="ecl" value="${esc(e.cliente)}" placeholder="Ej: Ana Torres"></div>
-      <div class="field"><label for="etel">Celular</label><input class="input" id="etel" inputmode="tel" value="${esc(e.telefono || "")}" placeholder="Opcional"></div></div>
+      <div class="field"><label for="etel">Celular</label><input class="input" id="etel" type="tel" inputmode="tel" autocomplete="off" maxlength="16" value="${esc(e.telefono || "")}" placeholder="Opcional"></div></div>
     <div class="field"><label for="edet">¿Qué encargó?</label><textarea class="input" id="edet" rows="2" placeholder="Ej: torta de chocolate para 15 personas">${esc(e.detalle)}</textarea></div>
     <div class="grid2"><div class="field"><label for="epara">Para el día</label><input class="input" type="date" id="epara" value="${esc(e.para)}"></div>
       <div class="field"><label for="ehora">Hora (opcional)</label><input class="input" type="time" id="ehora" value="${esc(e.hora || "")}"></div>
@@ -1890,10 +1925,12 @@ function openEncargo(e){
     <button class="btn primary block" id="esave2">${nuevo ? "Guardar encargo" : "Guardar cambios"}</button>
     ${nuevo ? "" : `<button class="btn ghost block" id="edel" style="color:var(--bad)">Borrar encargo</button>`}
   </div>`);
+  phoneInput($("#etel"));
   const leer = () => ({ cliente:$("#ecl").value.trim(), telefono:$("#etel").value.trim(), detalle:$("#edet").value.trim(), para:$("#epara").value, hora:$("#ehora").value,
     total:Math.round(+$("#etot").value || 0), abono:Math.round(+$("#eab").value || 0) });
   $("#esave2").onclick = () => run(async () => { const f = leer();
     if (!f.cliente) return $("#ecl").focus(); if (!f.detalle) return $("#edet").focus(); if (!f.para) return $("#epara").focus();
+    if (!phoneOk(f.telefono)){ $("#etel").focus(); return toast(PHONE_MSG); }
     await act.put("encargos", [Object.assign({}, nuevo ? withWho({ at:LocalDB.now() }) : e, f, { id:e.id, estado:e.estado })]); closeModal(); render(); toast(nuevo ? `Encargo de ${f.cliente} anotado` : "Encargo guardado"); });
   document.querySelectorAll("[data-est]").forEach(b => b.onclick = () => run(async () => { const est = b.dataset.est;
     const v = Object.assign({}, e, leer(), { estado:est }); if (est === "entregado") v.entregado = LocalDB.now();
@@ -1941,7 +1978,7 @@ function openTipoPan(p){
     document.querySelectorAll("[data-tpu]").forEach(x => x.setAttribute("aria-pressed", x === b)); $("#tppl").textContent = kg ? "Precio del kilo" : "Precio de cada pan"; });
   $("#tpsave").onclick = () => run(async () => {
     const name = $("#tpn").value.trim(), price = Math.round(+$("#tpp").value || 0);
-    if (!name) return $("#tpn").focus(); if (!price) return $("#tpp").focus();
+    if (!name) return $("#tpn").focus(); if (!(price > 0)) return $("#tpp").focus();
     const f = { name, price, kg, atajo:$("#tpat").checked, reserva:$("#tpres").checked };
     if (nuevo){ await act.put("products", [Object.assign({ id:uid(), cat:"Pan", cost:Math.round(price * 0.65), barcode:"", min:kg ? 5 : 20, has:true, countQty:null, countAt:null, estimated:false }, f)]);
       S.products.sort((a, b) => a.name.localeCompare(b.name, "es")); }
@@ -2002,7 +2039,7 @@ function descargarExcel(){
     ["Producto", "Cantidad", "Total"], ...r.top.map(([id, x]) => [P(id).name, r3(x.q), Math.round(x.t)])];
   const ventas = [["Fecha", "Hora", "Producto", "Sector", "Cantidad", "Precio", "Descuento", "Total", "Medio de pago", "Atendió"],
     ...r.ms.slice().sort((a, b) => a.at - b.at).map(m => { const p = P(m.pid), d = new Date(m.at);
-      return [d.toLocaleDateString("es-CL"), d.toLocaleTimeString("es-CL", { hour:"2-digit", minute:"2-digit" }), p?.name || "", p?.cat || "", r3(m.qty), Math.round(m.lista ?? m.price), Math.round(m.desc || 0), Math.round(m.qty * m.price), m.pago ? PAGOS[m.pago] : "", nombrePersona(m.quien)]; })];
+      return [d.toLocaleDateString("es-CL"), d.toLocaleTimeString("es-CL", { hour:"2-digit", minute:"2-digit", hourCycle:"h23" }), p?.name || "", p?.cat || "", r3(m.qty), Math.round(m.lista ?? m.price), Math.round(m.desc || 0), Math.round(m.qty * m.price), m.pago ? PAGOS[m.pago] : "", nombrePersona(m.quien)]; })];
   const blob = xlsx([{ name:"Resumen", rows:res }, { name:"Ventas", rows:ventas }]);
   const url = URL.createObjectURL(blob), a = document.createElement("a");
   a.href = url; a.download = `ventas-${PERIODOS[k].toLowerCase().replace(/\s+/g, "-").normalize("NFD").replace(/[̀-ͯ]/g, "")}-${hoy()}.xlsx`;
@@ -2487,7 +2524,9 @@ function render(){
     app.querySelectorAll("[data-rpq]").forEach(b => b.onclick = () => { const y = window.scrollY; addToRecv(P(b.dataset.rpq)); window.scrollTo(0, y); });
     app.querySelectorAll("[data-rcaja]").forEach(i => i.onchange = () => { const l = ui.recv.items[i.dataset.rcaja], p = P(l.pid);
       l.caja = i.checked ? { n:"", por:p.porCaja || "", precio:"" } : null; rerender(); });
-    const caja = (attr, k) => app.querySelectorAll(`[data-${attr}]`).forEach(i => i.onchange = () => { const l = ui.recv.items[i.dataset[attr]]; l.caja[k] = Math.round(+i.value || 0);
+    const caja = (attr, k) => app.querySelectorAll(`[data-${attr}]`).forEach(i => i.onchange = () => { const l = ui.recv.items[i.dataset[attr]];
+      if (k === "por" && cajaVal(i.value) === undefined){ toast(CAJA_MSG); l.caja.por = ""; return rerender(); }
+      l.caja[k] = Math.max(0, Math.round(+i.value || 0));
       const { n, por, precio } = l.caja; if (n && por){ l.qty = n * por; if (precio) l.cost = Math.round(precio / por); } rerender(); });
     caja("rcn", "n"); caja("rcu", "por"); caja("rcp", "precio");
     app.querySelectorAll("[data-rc]").forEach(i => i.oninput = () => { ui.recv.items[i.dataset.rc].cost = Math.max(0, +i.value||0); });
