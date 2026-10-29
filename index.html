@@ -376,8 +376,8 @@ let MODE = null;      // "local" cuando la tienda está abierta; null en la pant
 let S = null;
 const meta = { tienda:null, device:null, demo:false, pending:0, servidor:"" };
 
-const P = id => S.products.find(p => p.id === id);
-const clientRow = c => ({ id:c.id, name:c.name, phone:c.phone || "" });
+const P = id => S.products.find(p => p.id === id) || S.gone.find(p => p.id === id);
+const clientRow = c => Object.assign({ id:c.id, name:c.name, phone:c.phone || "" }, c.eliminado ? { eliminado:true } : {});
 const fiadoRow = (c, i) => Object.assign({ id:i.id, cid:c.id, type:i.type, amount:i.amount, note:i.note || "", at:i.at }, i.quien ? { quien:i.quien } : {});
 const ops = (store, list) => list.map(value => ({ store, value }));
 
@@ -386,10 +386,12 @@ async function loadLocal(){
   meta.tienda = t.meta.tienda || null; meta.device = t.meta.device || null; meta.demo = !!t.meta.demo; meta.pending = t.pending; meta.servidor = t.meta.servidor || ""; meta.prefs = t.meta.prefs || null; meta.cuenta = t.meta.cuenta || null;
   if (meta.device) LocalDB.clock.device = meta.device.id;
   const aj = Object.fromEntries(t.ajustes.map(a => [a.clave, a.valor]));
-  const clients = t.clients.map(c => ({ id:c.id, name:c.name, phone:c.phone || "", items:[] })), byId = Object.fromEntries(clients.map(c => [c.id, c]));
+  const clients = t.clients.map(c => Object.assign({ id:c.id, name:c.name, phone:c.phone || "", items:[] }, c.eliminado ? { eliminado:true } : {})), byId = Object.fromEntries(clients.map(c => [c.id, c]));
   t.fiados.sort((a, b) => a.at - b.at).forEach(f => byId[f.cid]?.items.push(Object.assign({ id:f.id, type:f.type, amount:f.amount, note:f.note, at:f.at }, f.quien ? { quien:f.quien } : {})));
   const strip = o => { const { _v, ...rest } = o; return rest; };
-  S = { products: t.products.map(strip).sort((a, b) => a.name.localeCompare(b.name, "es")), movs: t.movs.map(strip).sort((a, b) => a.at - b.at),
+  // Un producto eliminado sale de todas las listas (S.gone), pero sus ventas y movimientos siguen en el historial
+  const prods = t.products.map(strip).sort((a, b) => a.name.localeCompare(b.name, "es"));
+  S = { products: prods.filter(p => !p.eliminado), gone: prods.filter(p => p.eliminado), movs: t.movs.map(strip).sort((a, b) => a.at - b.at),
     clients, reservas: t.reservas.map(strip), panMsg: aj.mensaje_pan ?? "", ajustes: aj };
   for (const k of EXT_TABLAS) S[k] = (t[k] || []).map(strip);
   meta.persona = t.meta.persona || "";
@@ -560,6 +562,14 @@ const act = {
     await commit([...ops("products", [p]), ...ops("movs", movs)]);
     S.products.push(p); S.movs.push(...movs); return p;
   },
+  // Eliminar: queda marcado (no se borra) para que el historial, los resúmenes y la caja sigan cuadrando
+  async deleteProduct(p){
+    const v = Object.assign({}, p, { eliminado:true, barcode:"", atajo:false });
+    await commit(ops("products", [v]));
+    S.products = S.products.filter(x => x.id !== p.id); S.gone.push(v);
+    ui.cart = ui.cart.filter(l => l.pid !== p.id); ui.recv.items = ui.recv.items.filter(l => l.pid !== p.id); delete ui.draft[p.id];
+  },
+  async deleteClient(c){ c.eliminado = true; await commit(ops("clients", [clientRow(c)])); },
   async newClient(name, phone){
     const c = { id:uid(), name, phone, items:[] };
     await commit(ops("clients", [clientRow(c)])); S.clients.push(c); return c;
@@ -862,14 +872,17 @@ function casi(a, b){ // ¿a y b difieren en una letra como máximo?
   while (i < la && j < lb){ if (a[i] === b[j]){ i++; j++; continue; } if (++d > 1) return false; if (la > lb) i++; else if (lb > la) j++; else { i++; j++; } }
   return d + (la - i) + (lb - j) <= 1;
 }
+// Cómo suena en español de Chile: qu/k/c fuerte, c suave/z/s, v/b, ll/y, h muda ("marraketa" = "marraqueta")
+const fon = s => s.replace(/qu/g, "k").replace(/c(?=[aou ]|$)/g, "k").replace(/c(?=[ei])/g, "s").replace(/z/g, "s").replace(/v/g, "b").replace(/ll/g, "y").replace(/(^|[^c])h/g, "$1");
 function buscar(q, list){
   const nq = norm(q), code = String(q).trim(); if (!nq) return { exactos:[], parecidos:[] };
-  const words = nq.split(" "), a = [], b = [], c = [];
+  const words = nq.split(" "), fw = words.map(fon), a = [], b = [], c = [];
   for (const p of list){
     if (p.barcode && p.barcode === code){ a.unshift(p); continue; }
     const n = norm(p.name);
     if (n.startsWith(nq)) a.push(p);
     else if (words.every(w => n.includes(w))) b.push(p);
+    else if (fw.every(w => w.length >= 3 && fon(n).includes(w))) b.push(p);
     else { const pw = n.split(/[ ,.\-()]+/);
       if (words.every(w => n.includes(w) || (w.length >= 3 && pw.some(x => casi(w, x) || (x.length > w.length && casi(w, x.slice(0, w.length))))))) c.push(p); }
   }
@@ -1062,6 +1075,7 @@ function openProduct(p){
     <label class="row small"><input type="checkbox" id="ehas" ${p.has ? "checked" : ""}> Lo vendemos (si lo desmarcas, sale de Vender, Contar y las listas)</label>
     <button class="btn primary block" id="esave">Guardar cambios</button>
     ${ext("vencimientos") ? `<button class="btn block" id="evenc">Anotar vencimiento</button>` : ""}
+    ${puede("precios") ? `<button class="btn ghost block" id="pdel" style="color:var(--bad)">Eliminar producto</button>` : ""}
     <div><h3>Últimos movimientos</h3><div class="list" id="phist">${hist.map(movRow).join("") || `<div class="empty">Sin movimientos.</div>`}</div></div>
   </div>`);
   $("#esave").onclick = () => run(async () => {
@@ -1075,6 +1089,14 @@ function openProduct(p){
     await act.updateProduct(p, f);
     closeModal(); toast("Producto actualizado"); render(); });
   const ev = $("#evenc"); if (ev) ev.onclick = () => { closeModal(); ui.venc = { pid:p.id }; go("vencimientos"); };
+  const pd = $("#pdel"); if (pd) pd.onclick = () => {
+    openModal(`<div class="stack"><h2>¿Eliminar ${esc(p.name)}?</h2>
+      <p style="margin:0">Sale de Vender, Contar, Productos y la página de la tienda${p.barcode ? ", y su código de barras queda libre para otro producto" : ""}. Sus ventas y movimientos siguen en el historial y en los resúmenes.</p>
+      <p class="small muted" style="margin:0">Si solo dejaste de venderlo por un tiempo, mejor desmarca "Lo vendemos".</p>
+      <div class="grid2"><button class="btn" id="pdno">Cancelar</button><button class="btn primary" id="pdok" style="background:var(--bad);border-color:var(--bad)">Eliminar</button></div></div>`);
+    $("#pdno").onclick = () => openProduct(p);
+    $("#pdok").onclick = () => run(async () => { await act.deleteProduct(p); closeModal(); render(); toast(`${p.name} eliminado`); });
+  };
   if (!puede("costos")) $("#ec").closest(".field").remove();
   if (!puede("precios")){ document.querySelectorAll(".overlay input").forEach(i => i.disabled = true); $("#esave").replaceWith(Object.assign(document.createElement("p"), { className:"small muted", style:"margin:0", textContent:"Tu usuario puede ver este producto, pero no cambiarlo." })); }
 }
@@ -1139,7 +1161,7 @@ function waWeb(phone, text){ return "https://web.whatsapp.com/send?" + waQuery(p
 const WA_TARGET = IS_MOBILE ? 'target="_blank" rel="noopener"' : "";
 const waWebNote = (id, phone, text) => IS_MOBILE ? "" : `<p class="small muted" style="margin:0">¿No tienes WhatsApp instalado en este computador? <a id="${id}" href="${esc(waWeb(phone, text))}" target="whatsapp-web" rel="noopener" style="color:var(--brand)">Usar WhatsApp Web</a></p>`;
 function viewFiados(){
-  const cs = S.clients.slice().sort((a,b) => saldo(b) - saldo(a));
+  const cs = S.clients.filter(c => !c.eliminado).sort((a,b) => saldo(b) - saldo(a));
   const total = cs.reduce((a,c) => a + Math.max(0, saldo(c)), 0);
   return `${header("Fiados", "Cuaderno de cuentas de clientes")}
   <div class="stack">
@@ -1167,7 +1189,15 @@ function openCliente(c){
     <div class="grid2"><button class="btn primary" id="addFiado">Anotar fiado</button><button class="btn" id="addAbono">Registrar pago</button></div>
     <div><h3>Movimientos</h3><div class="list">${items.map(i => `<div class="item"><div class="main"><div class="name">${i.type === "fiado" ? esc(i.note || "Fiado") : "Pago"}</div><div class="sub">${ago(i.at)}</div></div>
       <span class="diff" style="color:${i.type === "fiado" ? "var(--bad)" : "var(--ok)"}">${i.type === "fiado" ? "+" : "−"}${clp(i.amount)}</span></div>`).join("") || `<div class="empty">Sin movimientos.</div>`}</div></div>
+    ${s <= 0 ? `<button class="btn ghost block" id="cdel" style="color:var(--bad)">Eliminar cliente</button>` : ""}
   </div>`);
+  const cd = $("#cdel"); if (cd) cd.onclick = () => {
+    openModal(`<div class="stack"><h2>¿Eliminar a ${esc(c.name)}?</h2>
+      <p style="margin:0">Sale de la lista de fiados. Sus pagos siguen contando en el cierre de caja y en los resúmenes.</p>
+      <div class="grid2"><button class="btn" id="cdno">Cancelar</button><button class="btn primary" id="cdok" style="background:var(--bad);border-color:var(--bad)">Eliminar</button></div></div>`);
+    $("#cdno").onclick = () => openCliente(c);
+    $("#cdok").onclick = () => run(async () => { await act.deleteClient(c); closeModal(); render(); toast(`${c.name} eliminado`); });
+  };
   const add = type => run(async () => { const a = Math.round(+$("#fm").value || 0); if (a <= 0){ $("#fm").focus(); return; }
     if (a > MAX_FIADO){ $("#fm").focus(); return toast(`Revisa el monto: el máximo por anotación es ${clp(MAX_FIADO)}`); }
     const debe = saldo(c);
@@ -2592,7 +2622,7 @@ async function openStore(){
   if (!meta.demo && meta.servidor){ Sync.start(meta.servidor, meta.tienda.id); refrescarCuenta(); } else Sync.stop();
 }
 Sync.state.onStatus = s => { LocalDB.pendingCount().then(n => { meta.pending = n; if (MODE) updateNet(); }, () => {}); if (s === "cuenta" && MODE) render(); };
-Sync.state.onRechazo = n => toast(n === 1 ? "Un cambio no se guardó porque tu usuario no tiene permiso" : `${n} cambios no se guardaron porque tu usuario no tiene permiso`);
+Sync.state.onRechazo = n => toast(`${n === 1 ? "Un cambio no se guardó" : n + " cambios no se guardaron"} en el servidor: tu usuario no tiene permiso o había un número fuera de lo permitido`);
 Sync.state.onChange = async () => { await loadLocal(); avisarReservas(); if (MODE) softRender(); };
 
 function showSetup(){
