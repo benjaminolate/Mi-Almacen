@@ -49,9 +49,7 @@ function enviar(tienda, para) {
   const file = armar(tienda);
   const json = JSON.stringify(file);
   const dia = file.creado.slice(0, 10);
-  // Nombre del archivo sin tildes: algunos programas de correo no muestran bien los adjuntos con tildes
-  const sin = { "á": "a", "é": "e", "í": "i", "ó": "o", "ú": "u", "ü": "u", "ñ": "n" };
-  const slug = file.tienda.nombre.toLowerCase().replace(/[áéíóúüñ]/g, (x) => sin[x]).replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "tienda";
+  const slug = file.tienda.nombre.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "tienda";
   const nombre = `respaldo-${slug}-${dia}.json`;
   const adj = $filesystem.fileFromBytes(toBytes(json), nombre);
   const rd = adj.reader.open();
