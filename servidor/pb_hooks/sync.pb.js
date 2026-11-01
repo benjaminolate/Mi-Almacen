@@ -7,7 +7,7 @@
 //   3. Avisa en tiempo real a los otros dispositivos de la tienda (canal "tienda/<id>").
 //
 // Valores: un cambio con números fuera de rango (precios negativos, fiados de más de un
-// millón, celulares mal escritos...) tampoco se guarda, aunque la tienda no tenga cuentas.
+// millón, packs de una unidad...) tampoco se guarda, aunque la tienda no tenga cuentas.
 //
 // Acceso: una tienda sin cuentas se abre con su código (un UUID imposible de adivinar).
 // Cuando el dueño activa las cuentas (Fase 4), además hay que entrar con un usuario que
