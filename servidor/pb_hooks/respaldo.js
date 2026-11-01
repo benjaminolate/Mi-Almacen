@@ -49,7 +49,7 @@ function enviar(tienda, para) {
   const file = armar(tienda);
   const json = JSON.stringify(file);
   const dia = file.creado.slice(0, 10);
-  const slug = file.tienda.nombre.toLowerCase().replace(/[^a-z0-9ñáéíóú]+/g, "-").replace(/^-|-$/g, "") || "tienda";
+  const slug = file.tienda.nombre.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "tienda";
   const nombre = `respaldo-${slug}-${dia}.json`;
   const adj = $filesystem.fileFromBytes(toBytes(json), nombre);
   const rd = adj.reader.open();
