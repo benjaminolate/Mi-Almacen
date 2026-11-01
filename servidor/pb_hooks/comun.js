@@ -145,7 +145,6 @@ function valido(store, value, prev) {
   const ok = (claves, regla) => claves.every((k) => !cambia(k) || regla(k));
   const vacio = (k) => v[k] == null || v[k] === "";
   const positivo = (k) => vacio(k) || (isFinite(+v[k]) && +v[k] >= 0);
-  const celular = (k) => { const d = String(v[k] || "").replace(/\D/g, ""); return !d || d.length === 9 || (d.length === 11 && d.indexOf("56") === 0); };
   switch (store) {
     case "products":
       return ok(["price", "cost", "min", "countQty"], positivo)
@@ -157,8 +156,8 @@ function valido(store, value, prev) {
     case "ofertas":
       if (v.tipo === "pack") return ok(["n", "precio"], () => Number.isInteger(+v.n) && +v.n >= 2 && +v.n <= 100 && +v.precio > 0);
       return ok(["pct"], (k) => +v[k] > 0 && +v[k] <= 100);
-    case "clients": return ok(["phone"], celular);
-    case "proveedores": case "encargos": return ok(["telefono"], celular);
+    // Los celulares se revisan solo en la app: si el servidor rechaza un cliente, proveedor o encargo
+    // nuevo, lo borra en el dispositivo, y un cliente borrado esconde sus fiados.
   }
   return true;
 }
