@@ -170,7 +170,7 @@ function row(p){
   const st = T.stock && STOCK[p.s], n = ui.cart[p.id] || 0;
   return `<div class="item"><div class="main"><div class="name">${esc(p.n)}</div>
       <div class="sub"><span class="price" style="color:var(--fg)">${p.p > 0 ? clp(p.p) : "Consultar"}</span>${p.kg && p.p > 0 ? " el kilo" : ""}${st ? ` · <span class="pill ${st[0]}">${st[1]}</span>` : ""}</div></div>
-    ${reservable(p) ? `<div class="stepper">${n > 0 ? `<button data-dec="${p.id}" aria-label="Quitar ${esc(p.n)}">−</button><span>${fq(p, n)}</span>` : ""}<button data-inc="${p.id}" aria-label="Reservar ${esc(p.n)}">+</button></div>` : ""}</div>`;
+    ${reservable(p) ? `<div class="stepper">${n > 0 ? `<button data-dec="${esc(p.id)}" aria-label="Quitar ${esc(p.n)}">−</button><span>${fq(p, n)}</span>` : ""}<button data-inc="${esc(p.id)}" aria-label="Reservar ${esc(p.n)}">+</button></div>` : ""}</div>`;
 }
 function step(id, d){
   const p = P(id); if (!p) return;
