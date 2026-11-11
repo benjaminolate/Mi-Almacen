@@ -1,0 +1,11 @@
+{
+  "name": "mi-almacen-pruebas",
+  "private": true,
+  "description": "Pruebas automáticas de Mi Almacén. La app no usa estas dependencias: son solo para probarla.",
+  "scripts": {
+    "test": "node --test --test-concurrency=1 --test-timeout=120000"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0"
+  }
+}
