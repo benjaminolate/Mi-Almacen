@@ -56,6 +56,7 @@ routerAdd("POST", "/api/sync", (e) => {
         // Lo que había solo se busca si hace falta: con cuentas, en movimientos (no se editan), o si el
         // valor nuevo no pasa la revisión (puede ser un campo antiguo que no cambió)
         const prev = P || ch.store === "movs" || (!borra && !c.valido(ch.store, ch.value, null)) ? c.ultimo(tienda, ch.store, key) : null;
+        if (!borra) ch.value = c.conCosto(P, ch.store, ch.value, prev);
         if ((!borra && !c.valido(ch.store, ch.value, prev)) || (P && !c.permite(P, ch.store, ch.value || {}, ch.del, prev, { db: tx.db(), tienda: tienda }))) {
           rechazados.push({ store: ch.store, key: key, hlc: hlc });
           continue;
@@ -92,7 +93,7 @@ routerAdd("POST", "/api/sync", (e) => {
     const del = r.getString("del");
     if (del) o.del = del;
     else o.value = JSON.parse(r.getString("value"));
-    return o;
+    return c.sinCostos(P, o);
   });
   const hasta = out.length ? out[out.length - 1].seq : desde;
 

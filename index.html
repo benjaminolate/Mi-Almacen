@@ -972,7 +972,7 @@ function viewRecibir(){
     <p class="small muted" style="margin:0;text-align:center">Lo anotado queda guardado aunque salgas de esta pantalla, hasta que lo guardes o lo descartes.</p>` : ""}
   </div>`;
 }
-function addToRecv(p){ const l = ui.recv.items.find(l => l.pid === p.id); if (l) l.qty++; else ui.recv.items.push({ pid:p.id, qty:p.kg ? 1 : 12, cost:p.cost }); render(); }
+function addToRecv(p){ const l = ui.recv.items.find(l => l.pid === p.id); if (l) l.qty++; else ui.recv.items.push({ pid:p.id, qty:p.kg ? 1 : 12, cost:p.cost || 0 }); render(); }
 
 function viewContar(){
   if (!ui.sector){
@@ -1091,7 +1091,9 @@ function openProduct(p){
     <div><h3>Últimos movimientos</h3><div class="list" id="phist">${hist.map(movRow).join("") || `<div class="empty">Sin movimientos.</div>`}</div></div>
   </div>`);
   $("#esave").onclick = () => run(async () => {
-    const f = { price:+$("#ep").value||0, cost:+$("#ec").value||0, min:num($("#em").value), barcode:$("#eb").value.trim(), name:$("#en").value.trim() || p.name };
+    const f = { price:+$("#ep").value||0, min:num($("#em").value), barcode:$("#eb").value.trim(), name:$("#en").value.trim() || p.name };
+    // Quien no ve costos no tiene el campo: el producto queda con el costo que tenía
+    if ($("#ec")) f.cost = +$("#ec").value||0;
     if (f.price < 0 || f.cost < 0 || f.min < 0) return toast("El precio, el costo y el stock mínimo no pueden ser negativos");
     if ($("#eprov")) f.prov = $("#eprov").value;
     if ($("#ekg")) f.kg = $("#ekg").checked;
@@ -1906,7 +1908,7 @@ function bindCompras(app){
   app.querySelectorAll("[data-cx]").forEach(b => b.onclick = () => { const id = b.dataset.cx; if (id in c.extra) delete c.extra[id]; else c.quitar[id] = true; delete c.qty[id]; rerender(); });
   app.querySelectorAll("[data-ccopy]").forEach(b => b.onclick = () => copiar(pedidoTexto(comprasGrupos().find(g => g.k === b.dataset.ccopy)), "Lista copiada"));
   app.querySelectorAll("[data-crecv]").forEach(b => b.onclick = () => { const g = comprasGrupos().find(g => g.k === b.dataset.crecv);
-    ui.recv = { supplier:g.pr?.nombre || "", items:g.items.filter(l => l.qty > 0).map(l => ({ pid:l.p.id, qty:l.qty, cost:l.p.cost })), debe:false };
+    ui.recv = { supplier:g.pr?.nombre || "", items:g.items.filter(l => l.qty > 0).map(l => ({ pid:l.p.id, qty:l.qty, cost:l.p.cost || 0 })), debe:false };
     g.items.forEach(l => { delete c.qty[l.p.id]; delete c.extra[l.p.id]; }); go("recibir"); });
   bindSearch(p => { delete c.quitar[p.id]; c.extra[p.id] = sugerido(p, stockOf(p)); rerender(); toast(`${p.name} agregado a la lista`); }, "#q", "#res", { all:true });
 }
@@ -2872,7 +2874,12 @@ function cerrarSesion(){
 }
 const api = (path, body) => cuentaApi(meta.servidor, path, body, meta.cuenta?.token);
 const entrar = (base, usuario, password) => cuentaApi(base, "/api/cuentas/entrar", { usuario, password });
-async function guardarCuenta(c){ meta.cuenta = c; await LocalDB.setMeta("cuenta", c); Sync.state.token = c?.token || ""; }
+async function guardarCuenta(c){
+  const veiaCostos = !!miTienda()?.permisos?.costos;
+  meta.cuenta = c; await LocalDB.setMeta("cuenta", c); Sync.state.token = c?.token || "";
+  // Sin el permiso, el servidor manda todo sin costos: quien recién lo tiene vuelve a pedir todo
+  if (!veiaCostos && miTienda()?.permisos?.costos) await Sync.pedirTodo();
+}
 // Renueva la sesión y los permisos cuando hay conexión
 async function refrescarCuenta(){
   if (!meta.cuenta?.token || !meta.servidor) return;

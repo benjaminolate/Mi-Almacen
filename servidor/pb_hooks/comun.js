@@ -161,6 +161,20 @@ function permite(P, store, value, del, prev, ctx) {
   }
 }
 
+// Costos: solo los ve quien tiene el permiso. A los demás el servidor les manda productos y
+// movimientos sin "cost" (sinCostos), y cuando devuelven un producto así, se le pone el costo que
+// tenía (conCosto) para que no se pierda. Pueden anotar un costo (al recibir), pero no leerlo.
+const CON_COSTO = ["products", "movs"];
+function conCosto(P, store, value, prev) {
+  if (!P || P.costos || store !== "products" || !value || value.cost !== undefined) return value;
+  if (!prev || !prev.value || prev.value.cost === undefined) return value;
+  return Object.assign({}, value, { cost: prev.value.cost });
+}
+function sinCostos(P, cambio) {
+  if (P && !P.costos && cambio.value && CON_COSTO.indexOf(cambio.store) >= 0) delete cambio.value.cost;
+  return cambio;
+}
+
 // ¿Los valores están dentro de lo que la app deja escribir? (lo mismo que revisan sus pantallas)
 // Solo se revisan los campos que cambian, para no trabar registros guardados antes de estas reglas.
 // prev: lo que había (de ultimo())
@@ -198,4 +212,4 @@ function valido(store, value, prev) {
 }
 
 module.exports = { UUID, PID, ID, maxSeq, avisar, guardarCambio, desdeInternet, ipCliente, limite,
-  PERMISOS, permisosDe, tieneMiembros, miembroDe, permisosMiembro, ultimo, saldoCliente, permite, valido };
+  PERMISOS, permisosDe, tieneMiembros, miembroDe, permisosMiembro, ultimo, saldoCliente, permite, valido, conCosto, sinCostos };
