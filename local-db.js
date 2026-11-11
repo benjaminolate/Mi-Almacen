@@ -126,7 +126,8 @@ async function applyRemote(changes){
     const st = tx.objectStore(c.store), id = c.del ?? c.value?.[STORES[c.store]];
     if (id == null) continue;
     const cur = await req(st.get(id));
-    if (cur && cur._v && cur._v >= c.hlc) continue;
+    // El mismo sello se vuelve a aplicar: llega completo cuando antes llegó sin costos (permiso nuevo)
+    if (cur && cur._v && cur._v > c.hlc) continue;
     if (c.del != null) { if (cur){ st.delete(id); n++; } }
     else { st.put(Object.assign({}, c.value, { _v:c.hlc })); n++; }
   }
