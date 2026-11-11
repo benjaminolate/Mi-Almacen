@@ -51,6 +51,8 @@ routerAdd("POST", "/api/sync", (e) => {
         if (tx.countRecords("cambios", $dbx.hashExp({ hlc: hlc })) > 0) continue;
         const borra = ch.del != null;
         const key = borra ? String(ch.del) : String((ch.store === "ajustes" ? (ch.value || {}).clave : (ch.value || {}).id) || "");
+        // Un id con caracteres de código se rechaza sin corregir nada: ningún dispositivo de la tienda lo creó
+        if (!c.ID.test(key)) { rechazados.push({ store: ch.store, key: "", hlc: hlc }); continue; }
         // Lo que había solo se busca si hace falta: con cuentas, en movimientos (no se editan), o si el
         // valor nuevo no pasa la revisión (puede ser un campo antiguo que no cambió)
         const prev = P || ch.store === "movs" || (!borra && !c.valido(ch.store, ch.value, null)) ? c.ultimo(tienda, ch.store, key) : null;
