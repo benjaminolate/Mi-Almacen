@@ -162,6 +162,14 @@ function permite(P, store, value, del, prev, ctx) {
 // Solo se revisan los campos que cambian, para no trabar registros guardados antes de estas reglas.
 // prev: lo que había (de ultimo())
 const MAX_FIADO = 1000000;
+// ¿Dos versiones de un registro difieren en algo más que su sello (_v)?
+function distinto(a, b) {
+  const claves = {};
+  for (const k in a) claves[k] = 1;
+  for (const k in b) claves[k] = 1;
+  for (const k in claves) if (k !== "_v" && JSON.stringify(a[k]) !== JSON.stringify(b[k])) return true;
+  return false;
+}
 function valido(store, value, prev) {
   const v = value || {}, antes = (prev && prev.value) || {};
   const cambia = (k) => JSON.stringify(v[k]) !== JSON.stringify(antes[k]);
@@ -173,7 +181,8 @@ function valido(store, value, prev) {
       return ok(["price", "cost", "min", "countQty"], positivo)
         && ok(["porCaja"], (k) => !v[k] || (Number.isInteger(+v[k]) && +v[k] >= 2 && +v[k] <= 1000))
         && ok(["countQty"], (k) => v.kg || vacio(k) || Number.isInteger(+v[k]));
-    case "movs": return ok(["qty", "price", "cost"], positivo);
+    // Los movimientos no se editan: una venta o compra ya guardada no cambia (volver a mandarla igual, sí)
+    case "movs": return ok(["qty", "price", "cost"], positivo) && !(prev && prev.value && distinto(prev.value, v));
     case "fiados": return ok(["amount"], (k) => isFinite(+v[k]) && +v[k] > 0 && +v[k] <= MAX_FIADO);
     case "provmovs": return ok(["amount"], (k) => isFinite(+v[k]) && +v[k] > 0);
     case "ofertas":
