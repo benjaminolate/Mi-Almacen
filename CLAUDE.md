@@ -20,7 +20,7 @@ en **español simple**.
 | `tienda.html` + `pagina.js` | Página pública de la tienda (lee `/api/publico/<pid>`). `pagina.js` valida los links (`PAGINA.href`). |
 | `qr.js` | Generador de códigos QR (biblioteca externa copiada; no editar a mano). |
 | `sw.js` | Service worker. `VERSION` (la versión de la copia guardada) y la lista `FILES` de lo que se guarda para abrir sin internet. |
-| `servidor/pb_hooks/*.pb.js` | Rutas del servidor: `sync`, `cuentas`, `publico` (incluye el bloqueo de lo que llega por internet), `respaldo` (correo diario). |
+| `servidor/pb_hooks/*.pb.js` | Rutas del servidor: `sync`, `cuentas`, `publico` (incluye el bloqueo de lo que llega por internet), `respaldo` (correo diario), `archivos` (la lista de archivos de la app que el servidor entrega). |
 | `servidor/pb_hooks/comun.js`, `cuentas.js`, `respaldo.js` | Funciones compartidas. Las reglas de permisos (`permite`) y de valores (`valido`) están en `comun.js`. |
 | `servidor/pb_migrations/` | Tablas `cambios`, `vitrinas`, `usuarios`, `miembros` y el respaldo automático. |
 | `servidor/iniciar.bat`, `iniciar.sh` | Prenden PocketBase con datos en `../../mi-almacen-datos` (fuera del repo) y sirven la carpeta del repo como sitio. |
@@ -53,7 +53,7 @@ en **español simple**.
 3. **Los permisos se validan en el servidor.** Ocultar un dato en pantalla no lo protege.
 4. **Si cambias un archivo que guarda `sw.js`** (los de `FILES` y la página principal `./`), sube
    `VERSION` en `sw.js` y comprueba que la app abre sin internet. Si agregas un archivo que la app
-   necesita para abrir, súmalo a `FILES`.
+   necesita para abrir, súmalo a `FILES` y a la lista `APP` de `servidor/pb_hooks/archivos.pb.js`.
 5. **Los datos del servidor viven en `mi-almacen-datos`, fuera del repo.** Nunca subas datos,
    respaldos (`respaldo-*.json`), claves ni archivos `.env`. Revisa el diff antes de cada commit.
 6. `Inventario_almacen_VD` es solo referencia: leer, nunca modificar.
