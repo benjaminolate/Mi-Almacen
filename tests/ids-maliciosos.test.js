@@ -35,10 +35,11 @@ test("la app muestra registros con ids maliciosos sin ejecutar código, y los pu
     // Todas las extensiones, para que se vean todas las pantallas
     await h.irA(page, "extensiones");
     // Cada cambio vuelve a dibujar la pantalla: se marca una a la vez
-    for (let n; (n = await page.locator("[data-ext]:not(:checked)").count());){
+    // y se espera a que quede guardada antes de la siguiente
+    for (let id; (id = await page.evaluate(() => document.querySelector("[data-ext]:not(:checked)")?.dataset.ext));){
       // Con un clic directo: el aviso de la extensión anterior puede tapar la siguiente
-      await page.evaluate(() => document.querySelector("[data-ext]:not(:checked)").click());
-      await h.esperarQue(page, n => document.querySelectorAll("[data-ext]:not(:checked)").length < n, n, { que:"la extensión" });
+      await page.evaluate(id => document.querySelector(`[data-ext="${id}"]`).click(), id);
+      await h.esperarQue(page, id => LocalDB.loadAll().then(t => t.ajustes.some(a => a.clave === "extensiones" && a.valor[id])), id, { que:"la extensión " + id });
     }
 
     await page.evaluate(c => LocalDB.applyRemote(c), registrosMaliciosos());
