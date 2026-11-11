@@ -192,7 +192,7 @@ function valido(store, value, prev) {
       if (v.tipo === "pack") return ok(["n", "precio"], () => Number.isInteger(+v.n) && +v.n >= 2 && +v.n <= 100 && +v.precio > 0);
       return ok(["pct"], (k) => +v[k] > 0 && +v[k] <= 100);
     // Los celulares se revisan solo en la app: si el servidor rechaza un cliente, proveedor o encargo
-    // nuevo, lo borra en el dispositivo, y un cliente borrado esconde sus fiados.
+    // nuevo, queda solo en el dispositivo que lo anotó y los demás no lo ven.
   }
   return true;
 }
