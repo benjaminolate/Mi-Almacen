@@ -33,3 +33,9 @@ servidor/pocketbase
 servidor/pocketbase.exe
 pb_data/
 mi-almacen-datos/
+
+# Pruebas: dependencias y capturas que se generan al correrlas
+tests/capturas/
+
+# Respaldos que descarga la app (pueden traer datos reales)
+respaldo-*.json

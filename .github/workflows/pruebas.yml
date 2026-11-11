@@ -1,0 +1,51 @@
+# Corre las pruebas de tests/ en cada PR y en cada cambio a main.
+name: Pruebas
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  pruebas:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PB_VERSION: "0.40.5"
+      # Aquí las pruebas que usan el servidor no se pueden saltar
+      PB_OBLIGATORIO: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: tests/package-lock.json
+
+      - name: Instalar dependencias de las pruebas
+        working-directory: tests
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Descargar PocketBase ${{ env.PB_VERSION }}
+        run: |
+          curl -fsSL -o pb.zip "https://github.com/pocketbase/pocketbase/releases/download/v${PB_VERSION}/pocketbase_${PB_VERSION}_linux_amd64.zip"
+          mkdir -p "$RUNNER_TEMP/pb" && unzip -q pb.zip -d "$RUNNER_TEMP/pb" && rm pb.zip
+          echo "PB_BIN=$RUNNER_TEMP/pb/pocketbase" >> "$GITHUB_ENV"
+
+      - name: Correr las pruebas
+        working-directory: tests
+        run: npm test
+
+      - name: Guardar capturas de pantalla
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: capturas
+          path: tests/capturas/
+          if-no-files-found: ignore
