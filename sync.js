@@ -10,7 +10,7 @@
 (function(){
 "use strict";
 const BATCH = 200;
-const state = { url:"", tienda:"", token:"", onRechazo:null, status:"off", last:0, error:"", running:false, current:null, again:false, es:null, timer:null, onChange:null, onStatus:null };
+const state = { url:"", tienda:"", token:"", onRechazo:null, status:"off", last:0, error:"", running:false, current:null, again:false, desdeCero:false, es:null, timer:null, onChange:null, onStatus:null };
 
 const api = path => state.url.replace(/\/+$/, "") + path;
 const setStatus = (s, err = "") => { state.status = s; state.error = err; state.onStatus?.(s); };
@@ -40,7 +40,8 @@ async function cycle(){
       for (;;){
         const batch = await LocalDB.outboxBatch(BATCH);
         const t0 = Date.now();
-        const res = await post("/api/sync", { tienda:state.tienda, device:LocalDB.clock.device, desde:(await LocalDB.getMeta("cursor")) || 0,
+        const desde = state.desdeCero ? 0 : (await LocalDB.getMeta("cursor")) || 0; state.desdeCero = false
+        const res = await post("/api/sync", { tienda:state.tienda, device:LocalDB.clock.device, desde,
           cambios: batch.map(c => ({ hlc:c.hlc, device:c.device, store:c.store, value:c.value, del:c.del })) });
         // La hora del servidor, corregida por lo que tardó la respuesta
         const offset = Math.round(res.hora - (t0 + Date.now()) / 2);
@@ -50,7 +51,8 @@ async function cycle(){
         await LocalDB.guardarRechazados(res.rechazos);
         changed += await LocalDB.applyRemote(res.cambios || []);
         if (res.rechazados) state.onRechazo?.(res.rechazados);
-        await LocalDB.setMeta("cursor", res.hasta);
+        // Si mientras tanto se pidió volver a pedir todo, no se adelanta el cursor
+        if (!state.desdeCero) await LocalDB.setMeta("cursor", res.hasta);
         if (batch.length < BATCH && !res.mas) break;
       }
     } while (state.again);
@@ -63,6 +65,8 @@ async function cycle(){
   if (changed) state.onChange?.(changed);
 }
 let soon = null;
+// Vuelve a pedir todo al servidor (por ejemplo, al recibir el permiso de costos)
+async function pedirTodo(){ state.desdeCero = true; await LocalDB.setMeta("cursor", 0); syncNow(); }
 function syncSoon(ms = 400){ clearTimeout(soon); soon = setTimeout(syncNow, ms); }
 
 // Tiempo real: el servidor avisa en el canal "tienda/<id>" cada vez que alguien guarda algo
@@ -101,5 +105,5 @@ function stop(){ state.es?.close(); state.es = null; clearInterval(state.timer);
 window.addEventListener("online", () => syncSoon(0));
 document.addEventListener("visibilitychange", () => { if (!document.hidden) syncSoon(0); });
 
-window.Sync = { state, start, stop, syncNow, syncSoon, probe, api };
+window.Sync = { state, start, stop, syncNow, syncSoon, pedirTodo, probe, api };
 })();

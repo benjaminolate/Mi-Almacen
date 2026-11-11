@@ -2878,7 +2878,7 @@ async function guardarCuenta(c){
   const veiaCostos = !!miTienda()?.permisos?.costos;
   meta.cuenta = c; await LocalDB.setMeta("cuenta", c); Sync.state.token = c?.token || "";
   // Sin el permiso, el servidor manda todo sin costos: quien recién lo tiene vuelve a pedir todo
-  if (!veiaCostos && miTienda()?.permisos?.costos) await LocalDB.setMeta("cursor", 0);
+  if (!veiaCostos && miTienda()?.permisos?.costos) await Sync.pedirTodo();
 }
 // Renueva la sesión y los permisos cuando hay conexión
 async function refrescarCuenta(){
