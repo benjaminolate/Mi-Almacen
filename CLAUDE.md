@@ -19,7 +19,7 @@ en **español simple**.
 | `catalogos.js` | Productos típicos por tipo de negocio, sin precio. |
 | `tienda.html` + `pagina.js` | Página pública de la tienda (lee `/api/publico/<pid>`). `pagina.js` valida los links (`PAGINA.href`). |
 | `qr.js` | Generador de códigos QR (biblioteca externa copiada; no editar a mano). |
-| `sw.js` | Service worker. `VERSION` (hoy `v13`) y la lista `FILES` de lo que se guarda para abrir sin internet. |
+| `sw.js` | Service worker. `VERSION` (la versión de la copia guardada) y la lista `FILES` de lo que se guarda para abrir sin internet. |
 | `servidor/pb_hooks/*.pb.js` | Rutas del servidor: `sync`, `cuentas`, `publico` (incluye el bloqueo de lo que llega por internet), `respaldo` (correo diario). |
 | `servidor/pb_hooks/comun.js`, `cuentas.js`, `respaldo.js` | Funciones compartidas. Las reglas de permisos (`permite`) y de valores (`valido`) están en `comun.js`. |
 | `servidor/pb_migrations/` | Tablas `cambios`, `vitrinas`, `usuarios`, `miembros` y el respaldo automático. |

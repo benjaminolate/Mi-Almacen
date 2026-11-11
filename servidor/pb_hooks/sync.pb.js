@@ -53,7 +53,7 @@ routerAdd("POST", "/api/sync", (e) => {
         // Lo que había solo se busca si hace falta: con cuentas, o si el valor nuevo no pasa la revisión
         // (puede ser un campo antiguo que no cambió)
         const prev = P || (!borra && !c.valido(ch.store, ch.value, null)) ? c.ultimo(tienda, ch.store, key) : null;
-        if ((!borra && !c.valido(ch.store, ch.value, prev)) || (P && !c.permite(P, ch.store, ch.value || {}, ch.del, prev))) {
+        if ((!borra && !c.valido(ch.store, ch.value, prev)) || (P && !c.permite(P, ch.store, ch.value || {}, ch.del, prev, { db: tx.db(), tienda: tienda }))) {
           rechazados.push({ store: ch.store, key: key, hlc: hlc });
           continue;
         }

@@ -120,6 +120,19 @@ async function esperarSincronizado(page, ms = 20000){
   await esperarQue(page, async () => Sync.state.status === "ok" && await LocalDB.pendingCount() === 0, undefined, { ms, que:"que diga Sincronizado" });
 }
 
+// El dueño activa las cuentas desde la app (Más > Cuentas y permisos), como lo haría en la tienda
+async function activarCuentas(page, usuario = "rosa", password = "clave123"){
+  await irA(page, "cuentas");
+  await page.fill("#cnom", "Rosa");
+  await page.fill("#cusr", usuario);
+  await page.fill("#cpw", password);
+  await page.fill("#cpw2", password);
+  await page.click("#cact");
+  await esperarQue(page, () => LocalDB.getMeta("cuenta").then(c => !!c?.token), undefined, { que:"que se activen las cuentas" });
+  await esperarSincronizado(page);
+  return (await page.evaluate(() => LocalDB.getMeta("cuenta"))).token;
+}
+
 // Pedido directo al servidor, como lo hace la app (la sesión va tal cual en Authorization)
 async function api(url, ruta, cuerpo, token){
   const headers = { "Content-Type":"application/json" }; if (token) headers.Authorization = token;
@@ -144,4 +157,4 @@ function captura(page, nombre){
 }
 
 module.exports = { RAIZ, servirApp, faltaPocketBase, prenderServidor, esperar, esperarQue, esperarVentas, navegador, dispositivo, crearTienda,
-  irA, venderUno, ventas, pendientes, esperarSincronizado, api, sello, ultimos, captura };
+  irA, venderUno, ventas, pendientes, esperarSincronizado, activarCuentas, api, sello, ultimos, captura };
