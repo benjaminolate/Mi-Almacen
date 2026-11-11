@@ -56,6 +56,19 @@ async function prenderServidor(){
 
 const esperar = ms => new Promise(r => setTimeout(r, ms));
 
+// Repite fn dentro de la página hasta que devuelva algo verdadero. page.waitForFunction no sirve
+// para esto: toma una promesa como verdadera sin esperarla, y la base de datos local es asíncrona.
+async function esperarQue(page, fn, arg, { ms = 20000, que = "la condición" } = {}){
+  const hasta = Date.now() + ms;
+  for (;;){
+    if (await page.evaluate(fn, arg)) return;
+    if (Date.now() > hasta) throw new Error(`Pasaron ${ms / 1000} s esperando ${que}`);
+    await esperar(200);
+  }
+}
+// Espera a que el dispositivo tenga exactamente n ventas guardadas
+const esperarVentas = (page, n, ms) => esperarQue(page, n => LocalDB.loadAll().then(t => t.movs.filter(m => m.type === "venta").length === n), n, { ms, que:`${n} ventas` });
+
 async function navegador(){ return chromium.launch(); }
 
 // Un "dispositivo": su propio navegador aislado, con tamaño de celular
@@ -74,7 +87,7 @@ async function crearTienda(page, url, nombre = "Almacén de Prueba"){
   await page.fill("#sp", "Rosa");
   await page.click("#screate");
   await page.waitForSelector("#tabs [data-view]");
-  await page.waitForFunction(async () => !!(await LocalDB.getMeta("tienda")));
+  await esperarQue(page, async () => !!(await LocalDB.getMeta("tienda")), undefined, { que:"que se cree la tienda" });
 }
 
 // Abre una pantalla: con su pestaña de abajo, o desde Más
@@ -95,7 +108,7 @@ async function venderUno(page, buscar, precio = 1000){
   await page.waitForSelector("#confirm:not([disabled])");
   const antes = (await ventas(page)).length;
   await page.click("#confirm");
-  await page.waitForFunction(n => LocalDB.loadAll().then(t => t.movs.filter(m => m.type === "venta").length > n), antes, { polling:200 });
+  await esperarVentas(page, antes + 1);
 }
 
 // Lo que tiene guardado el dispositivo (IndexedDB), leído con la misma base de la app
@@ -104,7 +117,7 @@ const pendientes = page => page.evaluate(() => LocalDB.pendingCount());
 
 // Espera a que el dispositivo no tenga nada por enviar y diga "Sincronizado"
 async function esperarSincronizado(page, ms = 20000){
-  await page.waitForFunction(async () => Sync.state.status === "ok" && await LocalDB.pendingCount() === 0, null, { timeout:ms, polling:300 });
+  await esperarQue(page, async () => Sync.state.status === "ok" && await LocalDB.pendingCount() === 0, undefined, { ms, que:"que diga Sincronizado" });
 }
 
 // Pedido directo al servidor, como lo hace la app (la sesión va tal cual en Authorization)
@@ -130,5 +143,5 @@ function captura(page, nombre){
   return page.screenshot({ path:path.join(CAPTURAS, nombre + ".png"), fullPage:true });
 }
 
-module.exports = { RAIZ, servirApp, faltaPocketBase, prenderServidor, esperar, navegador, dispositivo, crearTienda,
+module.exports = { RAIZ, servirApp, faltaPocketBase, prenderServidor, esperar, esperarQue, esperarVentas, navegador, dispositivo, crearTienda,
   irA, venderUno, ventas, pendientes, esperarSincronizado, api, sello, ultimos, captura };

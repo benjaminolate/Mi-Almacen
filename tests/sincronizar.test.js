@@ -24,7 +24,7 @@ test("dos dispositivos se mantienen al día", { skip:falta || false }, async () 
 
     // Lo que vende A le llega solo a B
     await h.venderUno(a.page, "azucar", 1200);
-    await b.page.waitForFunction(() => LocalDB.loadAll().then(t => t.movs.filter(m => m.type === "venta").length === 2), null, { timeout:15000, polling:300 });
+    await h.esperarVentas(b.page, 2);
 
     // B vende sin internet: queda guardado y se envía al volver la conexión
     await b.ctx.setOffline(true);
@@ -33,7 +33,7 @@ test("dos dispositivos se mantienen al día", { skip:falta || false }, async () 
     await b.ctx.setOffline(false);
     await b.page.evaluate(() => window.dispatchEvent(new Event("online")));
     await h.esperarSincronizado(b.page);
-    await a.page.waitForFunction(() => LocalDB.loadAll().then(t => t.movs.filter(m => m.type === "venta").length === 3), null, { timeout:15000, polling:300 });
+    await h.esperarVentas(a.page, 3);
 
     const idsA = (await h.ventas(a.page)).map(m => m.id).sort(), idsB = (await h.ventas(b.page)).map(m => m.id).sort();
     assert.deepEqual(idsA, idsB);
