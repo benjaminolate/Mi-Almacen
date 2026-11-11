@@ -87,7 +87,8 @@ test("la app de un vendedor explica que no puede eliminar a quien debe", { skip:
     await clienteConDeuda(a.page, "Ana Debe", 5000);
     await h.esperarSincronizado(a.page);
     const tienda = (await a.page.evaluate(() => LocalDB.getMeta("tienda"))).id;
-    const D = (await h.api(pb.url, "/api/cuentas/activar", { tienda, usuario:"rosa", nombre:"Rosa", password:"clave123" })).json.token;
+    // Desde la app, para que la tienda quede marcada con cuentas activas en todos los dispositivos
+    const D = await h.activarCuentas(a.page);
     await h.api(pb.url, "/api/cuentas/miembros", { tienda, usuario:"vale", nombre:"Vale", password:"clave456", rol:"vendedor", permisos:{} }, D);
 
     const b = await h.dispositivo(browser);
