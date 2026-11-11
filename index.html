@@ -1520,6 +1520,9 @@ const fq = (p, q) => (+r3(q || 0)).toLocaleString("es-CL", { maximumFractionDigi
 const ymd = (t = Date.now()) => { const d = new Date(t); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; };
 const daysTo = f => Math.round((new Date(f + "T12:00") - new Date(ymd() + "T12:00")) / D);
 const fdate = f => new Date(f + "T12:00").toLocaleDateString("es-CL", { weekday:"short", day:"numeric", month:"short" });
+// "Revisado": alguien miró la estantería y lo dejó a la venta. No vuelve a avisar hasta que vence;
+// si se revisó antes de vencer y ya venció, avisa de nuevo.
+const revisadoVigente = v => !!v.revisado && (daysTo(v.fecha) >= 0 || ymd(v.revisado) >= v.fecha);
 const enDias = n => n < -1 ? `hace ${-n} días` : n === -1 ? "ayer" : n === 0 ? "hoy" : n === 1 ? "mañana" : `en ${n} días`;
 const DIAS = ["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"], ORDEN_DIAS = [1,2,3,4,5,6,0];
 const diasTxt = ds => ORDEN_DIAS.filter(d => ds?.includes(d)).map(d => DIAS[d]).join(", ");
@@ -1536,7 +1539,7 @@ function avisosInicio(){
     if (hoyE.length) card("encargos", "Encargos para hoy", `<span class="pill warn">${hoyE.length}</span>`, hoyE.slice(0, 3).map(e => esc(e.cliente)).join(", ") + (hoyE.length > 3 ? "…" : ""));
   }
   if (ext("vencimientos")){
-    const vs = S.vencimientos.filter(v => !v.done && P(v.pid) && daysTo(v.fecha) <= 7), venc = vs.filter(v => daysTo(v.fecha) < 0).length;
+    const vs = S.vencimientos.filter(v => !v.done && !revisadoVigente(v) && P(v.pid) && daysTo(v.fecha) <= 7), venc = vs.filter(v => daysTo(v.fecha) < 0).length;
     if (vs.length) card("vencimientos", "Vencen pronto", `<span class="pill ${venc ? "bad" : "warn"}">${venc ? venc + " vencidos" : vs.length}</span>`, "En los próximos 7 días: " + [...new Set(vs.map(v => P(v.pid).name))].slice(0, 3).map(esc).join(", "));
   }
   if (ext("proveedores")){
@@ -1827,12 +1830,13 @@ function viewVencimientos(){
   const vs = S.vencimientos.filter(v => !v.done && P(v.pid)).sort((a, b) => a.fecha.localeCompare(b.fecha));
   const sec = [["Vencidos", n => n < 0], ["Esta semana", n => n >= 0 && n <= 7], ["Este mes", n => n > 7 && n <= 31], ["Más adelante", n => n > 31]];
   const d = ui.venc;
-  const row = v => { const p = P(v.pid), n = daysTo(v.fecha); return `<div class="item"><div class="main"><div class="name">${esc(p.name)}</div><div class="sub">${esc(fdate(v.fecha))}${v.qty ? " · " + fq(p, v.qty) + (p.kg ? "" : v.qty === 1 ? " unidad" : " unidades") : ""}</div></div>
-    <span class="pill ${n < 0 ? "bad" : n <= 7 ? "warn" : "ok"}">${n < 0 ? "Vencido" : enDias(n)}</span>${ext("ofertas") && n >= 0 ? `<button class="btn sm" data-voferta="${v.pid}">Oferta</button>` : ""}<button class="btn sm" data-vdone="${v.id}">Listo</button></div>`; };
+  const row = v => { const p = P(v.pid), n = daysTo(v.fecha); return `<div class="item"><div class="main"><div class="name">${esc(p.name)}</div><div class="sub">${esc(fdate(v.fecha))}${v.qty ? " · " + fq(p, v.qty) + (p.kg ? "" : v.qty === 1 ? " unidad" : " unidades") : ""}${revisadoVigente(v) ? " · revisado " + ago(v.revisado) : ""}</div>
+      <div class="row" style="gap:6px;padding-top:6px">${n <= 7 && !revisadoVigente(v) ? `<button class="btn sm" data-vrev="${esc(v.id)}">Revisado</button>` : ""}${ext("ofertas") && n >= 0 ? `<button class="btn sm" data-voferta="${v.pid}">Oferta</button>` : ""}<button class="btn sm" data-vdone="${v.id}">Listo</button></div></div>
+    <span class="pill ${n < 0 ? "bad" : n <= 7 ? "warn" : "ok"}">${n < 0 ? "Vencido" : enDias(n)}</span></div>`; };
   return `${header("Vencimientos", "Lo que hay que vender o retirar pronto")}
   <div class="stack">
     ${sec.map(([t, f]) => { const l = vs.filter(v => f(daysTo(v.fecha))); return l.length ? `<div class="card" style="padding-block:12px 0"><h3>${t}</h3><div class="list">${l.map(row).join("")}</div></div>` : ""; }).join("") || `<div class="card empty">No hay vencimientos anotados.</div>`}
-    <p class="small muted" style="margin:0">Toca <b>Listo</b> cuando ya se vendió o se sacó de la estantería.${ext("ofertas") ? " Con <b>Oferta</b> le pones un descuento para venderlo antes." : ""}</p>
+    <p class="small muted" style="margin:0">Toca <b>Revisado</b> si ya miraste la estantería y queda a la venta: deja de avisar en el inicio hasta que venza. Toca <b>Listo</b> cuando ya se vendió o se sacó de la estantería.${ext("ofertas") ? " Con <b>Oferta</b> le pones un descuento para venderlo antes." : ""}</p>
     <div class="card stack"><h3>Anotar un vencimiento</h3>
       ${d.pid && P(d.pid) ? `<div class="spread"><b>${esc(P(d.pid).name)}</b><button class="btn sm ghost" id="vchange">Cambiar</button></div>`
         : `<div class="searchbar"><input class="input" id="q" placeholder="Buscar producto" autocomplete="off"><button class="btn accent" id="scan">Escanear</button></div><div class="list" id="res" hidden></div>`}
@@ -1847,6 +1851,8 @@ function bindVencimientos(app){
   const d = ui.venc;
   app.querySelectorAll("[data-vdone]").forEach(b => b.onclick = () => run(async () => { const v = S.vencimientos.find(x => x.id === b.dataset.vdone);
     await act.put("vencimientos", [Object.assign({}, v, { done:true, hecho:LocalDB.now() })]); rerender(); toast("Listo"); }));
+  app.querySelectorAll("[data-vrev]").forEach(b => b.onclick = () => run(async () => { const v = S.vencimientos.find(x => x.id === b.dataset.vrev);
+    await act.put("vencimientos", [Object.assign({}, v, { revisado:LocalDB.now() }, quien() ? { revisadoPor:quien() } : {})]); rerender(); toast("Revisado"); }));
   app.querySelectorAll("[data-voferta]").forEach(b => b.onclick = () => { const p = P(b.dataset.voferta);
     openOferta(null, { tipo:"descuento", pct:30, pids:[p.id], nombre:"Liquidación " + p.name }); });
   $("#vf").oninput = e => d.fecha = e.target.value; $("#vq").oninput = e => d.qty = e.target.value;
@@ -2225,7 +2231,7 @@ const AYUDA = {
   recibir:["Elige el proveedor (aparecen sus productos para tocarlos) y agrega lo que llegó.", "Marca Por caja para escribir cajas, unidades por caja y precio de la caja: la app calcula unidades y costo.", "El costo de cada producto se actualiza solo con lo que pagaste."],
   compras:["Aparecen solos los productos que llegaron a su mínimo o menos, separados por proveedor.", "Cambia la cantidad a pedir o el mínimo ahí mismo.", "Pide por WhatsApp o copia la lista, y cuando llegue pásala a Recibir mercadería."],
   proveedores:["Guarda celular, días de visita y lo que le debes a cada proveedor.", "Con Elegir productos le asignas varios de una vez y ves cuánto ganas con cada uno."],
-  vencimientos:["Anota la fecha al recibir o aquí abajo.", "Con Oferta le pones un descuento para venderlo antes; con Listo lo sacas de la lista."],
+  vencimientos:["Anota la fecha al recibir o aquí abajo.", "Con Revisado avisas que ya miraste la estantería; con Oferta le pones un descuento para venderlo antes; con Listo lo sacas de la lista."],
   ofertas:["Pack: varios por un precio, mezclando los productos elegidos.", "Descuento: un % por días u horas.", "Se aplican solas en Vender, y avisa cuando falta poco para completar un pack."],
   caja:["Muestra lo vendido desde el último cierre por medio de pago, más los pagos de fiados.", "Escribe el sencillo inicial y lo que cuentas en la caja: la app dice si cuadra, falta o sobra."],
   resumen:["Elige el período para ver total, ventas, ganancia estimada y lo más vendido.", "La ganancia usa el costo actual de cada producto.", "Descarga todo en Excel con una hoja de resumen y otra con cada venta."],
