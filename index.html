@@ -1201,10 +1201,12 @@ function openCliente(c){
     <div class="grid2"><button class="btn primary" id="addFiado">Anotar fiado</button><button class="btn" id="addAbono">Registrar pago</button></div>
     <div><h3>Movimientos</h3><div class="list">${items.map(i => `<div class="item"><div class="main"><div class="name">${i.type === "fiado" ? esc(i.note || "Fiado") : "Pago"}</div><div class="sub">${ago(i.at)}</div></div>
       <span class="diff" style="color:${i.type === "fiado" ? "var(--bad)" : "var(--ok)"}">${i.type === "fiado" ? "+" : "−"}${clp(i.amount)}</span></div>`).join("") || `<div class="empty">Sin movimientos.</div>`}</div></div>
-    ${s <= 0 ? `<button class="btn ghost block" id="cdel" style="color:var(--bad)">Eliminar cliente</button>` : ""}
+    ${s <= 0 || puede("config") ? `<button class="btn ghost block" id="cdel" style="color:var(--bad)">Eliminar cliente</button>`
+      : `<p class="small muted" style="margin:0">Para eliminar a alguien que todavía debe, pídeselo a quien puede cambiar los ajustes de la tienda.</p>`}
   </div>`);
   const cd = $("#cdel"); if (cd) cd.onclick = () => {
     openModal(`<div class="stack"><h2>¿Eliminar a ${esc(c.name)}?</h2>
+      ${s > 0 ? `<p class="pill warn" style="white-space:normal;margin:0;padding:8px 10px">Todavía debe ${clp(s)}. La deuda deja de verse en Fiados, pero queda guardada en los datos de la tienda.</p>` : ""}
       <p style="margin:0">Sale de la lista de fiados. Sus pagos siguen contando en el cierre de caja y en los resúmenes.</p>
       <div class="grid2"><button class="btn" id="cdno">Cancelar</button><button class="btn primary" id="cdok" style="background:var(--bad);border-color:var(--bad)">Eliminar</button></div></div>`);
     $("#cdno").onclick = () => openCliente(c);

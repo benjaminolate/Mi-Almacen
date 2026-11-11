@@ -107,9 +107,27 @@ function ultimo(tienda, store, key) {
   return { value: JSON.parse(rows[0].getString("value") || "{}"), hlc: hlc };
 }
 
+// Lo que debe un cliente: fiados menos pagos, con el último valor de cada anotación.
+// db: la del pedido en curso, para contar también lo que llega en el mismo envío.
+function saldoCliente(db, tienda, cid) {
+  const filas = arrayOf(new DynamicModel({ value: "", del: "" }));
+  db.newQuery("SELECT COALESCE(value, '') AS value, COALESCE(del, '') AS del FROM cambios WHERE tienda = {:t} AND store = 'fiados' AND (json_extract(value, '$.cid') = {:c}"
+    + " OR del IN (SELECT json_extract(value, '$.id') FROM cambios WHERE tienda = {:t} AND store = 'fiados' AND json_extract(value, '$.cid') = {:c})) ORDER BY seq")
+    .bind({ t: tienda, c: cid }).all(filas);
+  const ultimos = {};
+  for (const f of filas) {
+    if (f.del) { delete ultimos[f.del]; continue; }
+    try { const v = JSON.parse(f.value); ultimos[v.id] = v; } catch (err) {}
+  }
+  let saldo = 0;
+  for (const id in ultimos) { const v = ultimos[id]; if (v.cid === cid) saldo += (v.type === "fiado" ? 1 : -1) * (+v.amount || 0); }
+  return saldo;
+}
+
 // ¿Puede alguien con permisos P guardar este cambio? prev: lo que había (de ultimo())
+// ctx: { db, tienda } del pedido, para las reglas que miran otros registros
 const INVENTARIO_PRODUCTO = ["countQty", "countAt", "estimated", "has", "cost", "porCaja", "prov", "_v"];
-function permite(P, store, value, del, prev) {
+function permite(P, store, value, del, prev, ctx) {
   const borra = del != null;
   switch (store) {
     case "movs":
@@ -131,7 +149,12 @@ function permite(P, store, value, del, prev) {
     case "ofertas": return P.precios;
     case "personas": return P.config || P.cuentas;
     case "reservas": return true;
-    default: return borra ? P.config : true;   // clients, fiados, cajas, encargos
+    case "clients":
+      if (borra) return P.config;
+      // Eliminar a un cliente que todavía debe: solo quien puede cambiar los ajustes (decisión de Benjamin, nov 2026)
+      if (value.eliminado && !(prev && prev.value && prev.value.eliminado)) return P.config || saldoCliente(ctx.db, ctx.tienda, value.id) <= 0;
+      return true;
+    default: return borra ? P.config : true;   // fiados, cajas, encargos
   }
 }
 
@@ -163,4 +186,4 @@ function valido(store, value, prev) {
 }
 
 module.exports = { UUID, PID, maxSeq, avisar, guardarCambio, desdeInternet, ipCliente, limite,
-  PERMISOS, permisosDe, tieneMiembros, miembroDe, permisosMiembro, ultimo, permite, valido };
+  PERMISOS, permisosDe, tieneMiembros, miembroDe, permisosMiembro, ultimo, saldoCliente, permite, valido };
