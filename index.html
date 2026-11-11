@@ -2419,7 +2419,7 @@ function viewDatos(){
     <div class="card stack" data-perm="config"><h3>Respaldo</h3>
       <p class="small muted" style="margin:0">Descarga una copia de todo en un archivo y guárdala en otro lugar (computador, Google Drive o WhatsApp a ti mismo). Conviene hacerlo una vez por semana.</p>
       <button class="btn block" id="backup">Descargar respaldo</button>
-      <label class="btn block filebtn">Restaurar desde un respaldo<input type="file" id="restore" accept="application/json,.json"></label>
+      <label class="btn block filebtn">Restaurar desde un respaldo<input type="file" id="restore" accept="application/json,.json" multiple></label>
       ${!meta.demo && meta.servidor ? `<div class="field" style="padding-top:8px"><label for="rcor">Respaldo diario por correo</label><input class="input" id="rcor" type="email" inputmode="email" autocomplete="email" value="${esc(S.ajustes.respaldo_correo || "")}" placeholder="Ej: mitienda.respaldos@gmail.com"></div>
       <div class="grid2"><button class="btn" id="rcsave">Guardar correo</button><button class="btn" id="rctest" ${S.ajustes.respaldo_correo ? "" : "disabled"}>Mandar uno ahora</button></div>
       <p class="small muted" style="margin:0">Cada noche el servidor manda a ese correo un archivo con todo, para que quede una copia fuera del computador del servidor. Si algún día se pierde todo, se restaura aquí con ese archivo. El servidor necesita tener el correo configurado (servidor/INSTRUCCIONES.md).</p>` : ""}
@@ -2460,11 +2460,28 @@ async function downloadBackup(){
   document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 5000);
   toast(`Respaldo descargado: ${file.tablas.movs.length} movimientos`);
 }
-async function restoreBackup(input){
-  const f = input.files?.[0]; input.value = ""; if (!f) return;
+async function leerRespaldo(f){
   let data; try { data = JSON.parse(await f.text()); } catch(e){ throw new Error("No se pudo leer el archivo"); }
   if (data?.app !== "mi-almacen") throw new Error("El archivo no es un respaldo de esta app");
   if (!data.tablas || typeof data.tablas !== "object") throw new Error("El respaldo está incompleto o dañado");
+  return data;
+}
+// Un respaldo grande llega por correo en partes: se eligen todas juntas y se arma uno solo
+function juntarPartes(lista){
+  if (lista.length === 1 && !lista[0].parte) return lista[0];
+  const de = lista[0].parte?.de;
+  const mismo = lista.every(d => d.parte && d.parte.de === de && d.creado === lista[0].creado && d.tienda?.id === lista[0].tienda?.id);
+  if (!mismo) throw new Error("Elige un solo respaldo, o todas las partes del mismo respaldo");
+  const n = new Set(lista.map(d => d.parte.n));
+  if (lista.length !== de || n.size !== de) throw new Error(`Este respaldo viene en ${de} partes: elige los ${de} archivos juntos`);
+  const tablas = {};
+  for (const d of lista) for (const [s, filas] of Object.entries(d.tablas)) tablas[s] = [...(tablas[s] || []), ...(Array.isArray(filas) ? filas : [])];
+  const { parte, ...base } = lista[0];
+  return Object.assign(base, { tablas });
+}
+async function restoreBackup(input){
+  const files = [...(input.files || [])]; input.value = ""; if (!files.length) return;
+  const data = juntarPartes(await Promise.all(files.map(leerRespaldo)));
   // Los respaldos que llegan por correo vienen del servidor: traen la tienda, pero no los datos de un dispositivo
   const delServidor = !data.tablas.meta && data.tienda?.id;
   const tiendaMeta = delServidor ? data.tienda : (data.tablas.meta || []).find(m => m.key === "tienda")?.value;
@@ -2762,7 +2779,7 @@ function showSetup(){
     <button class="btn block" id="sjoin">Unirme a una tienda que ya existe</button>
     <button class="btn block" id="slogin">Entrar con mi usuario</button>
     <button class="btn block" id="sdemo">Solo quiero probar con datos de ejemplo</button>
-    <label class="btn ghost block filebtn">Tengo un respaldo: restaurarlo<input type="file" id="srestore" accept="application/json,.json"></label>
+    <label class="btn ghost block filebtn">Tengo un respaldo: restaurarlo<input type="file" id="srestore" accept="application/json,.json" multiple></label>
   </div>`);
   document.querySelectorAll("[data-ini]").forEach(b => b.onclick = () => { st.inicio = b.dataset.ini; st.auto = false; document.querySelectorAll("[data-ini]").forEach(x => x.setAttribute("aria-pressed", x === b)); });
   document.querySelectorAll("[data-tipo]").forEach(b => b.onclick = () => { st.tipo = b.dataset.tipo; document.querySelectorAll("[data-tipo]").forEach(x => x.setAttribute("aria-pressed", x === b));

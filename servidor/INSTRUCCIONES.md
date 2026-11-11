@@ -72,6 +72,8 @@ Las copias de arriba quedan en el mismo computador: si se echa a perder el disco
 
 Para recuperar los datos, en la app ve a **Más → Tienda y datos → Restaurar desde un respaldo** y elige el archivo `.json` del correo. En un dispositivo nuevo, la tienda queda creada con todo y, al conectarla a un servidor, se le envía lo restaurado. Si el servidor se perdió, puedes conectarla a uno nuevo.
 
+Si con el tiempo el respaldo pasa de unos 14 MB, llega dividido en varios correos ("parte 1 de 3", "parte 2 de 3"…), porque Gmail no acepta correos de más de 25 MB. Para restaurarlo, descarga todos los archivos de ese día y elígelos juntos.
+
 El servidor solo manda respaldos mientras está prendido. Si una noche estaba apagado, ese día no llega correo.
 
 ## 7. Conectar el servidor a internet (gratis, con candado)
