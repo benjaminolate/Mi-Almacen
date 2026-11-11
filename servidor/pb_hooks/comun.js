@@ -3,6 +3,9 @@
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const PID = /^[a-z0-9]{10,24}$/;
+// Ids de registros: la app los pone en el HTML, así que no pueden traer caracteres de código.
+// No se exige el formato UUID porque respaldos antiguos pueden traer ids de otra forma.
+const ID = /^[^<>"'`&\u0000-\u001f]{0,200}$/;
 
 // Último número de orden (seq) de los cambios de una tienda
 function maxSeq(db, tienda) {
@@ -194,5 +197,5 @@ function valido(store, value, prev) {
   return true;
 }
 
-module.exports = { UUID, PID, maxSeq, avisar, guardarCambio, desdeInternet, ipCliente, limite,
+module.exports = { UUID, PID, ID, maxSeq, avisar, guardarCambio, desdeInternet, ipCliente, limite,
   PERMISOS, permisosDe, tieneMiembros, miembroDe, permisosMiembro, ultimo, saldoCliente, permite, valido };
