@@ -7,7 +7,8 @@
 //   3. Avisa en tiempo real a los otros dispositivos de la tienda (canal "tienda/<id>").
 //
 // Valores: un cambio con números fuera de rango (precios negativos, fiados de más de un
-// millón, packs de una unidad...) tampoco se guarda, aunque la tienda no tenga cuentas.
+// millón, packs de una unidad...) o que edita un movimiento ya guardado tampoco se guarda,
+// aunque la tienda no tenga cuentas.
 //
 // Acceso: una tienda sin cuentas se abre con su código (un UUID imposible de adivinar).
 // Cuando el dueño activa las cuentas (Fase 4), además hay que entrar con un usuario que
@@ -50,9 +51,9 @@ routerAdd("POST", "/api/sync", (e) => {
         if (tx.countRecords("cambios", $dbx.hashExp({ hlc: hlc })) > 0) continue;
         const borra = ch.del != null;
         const key = borra ? String(ch.del) : String((ch.store === "ajustes" ? (ch.value || {}).clave : (ch.value || {}).id) || "");
-        // Lo que había solo se busca si hace falta: con cuentas, o si el valor nuevo no pasa la revisión
-        // (puede ser un campo antiguo que no cambió)
-        const prev = P || (!borra && !c.valido(ch.store, ch.value, null)) ? c.ultimo(tienda, ch.store, key) : null;
+        // Lo que había solo se busca si hace falta: con cuentas, en movimientos (no se editan), o si el
+        // valor nuevo no pasa la revisión (puede ser un campo antiguo que no cambió)
+        const prev = P || ch.store === "movs" || (!borra && !c.valido(ch.store, ch.value, null)) ? c.ultimo(tienda, ch.store, key) : null;
         if ((!borra && !c.valido(ch.store, ch.value, prev)) || (P && !c.permite(P, ch.store, ch.value || {}, ch.del, prev, { db: tx.db(), tienda: tienda }))) {
           rechazados.push({ store: ch.store, key: key, hlc: hlc });
           continue;
