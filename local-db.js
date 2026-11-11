@@ -50,14 +50,22 @@ function uuid(){
 // offset: diferencia entre el reloj del servidor y el de este dispositivo (la calcula sync.js)
 const clock = { ms:0, n:0, device:"", offset:0 };
 const now = () => Date.now() + clock.offset;
+// El contador va con 4 cifras (el servidor no acepta más): al llegar a 9999 se pasa al milisegundo siguiente
+const MAX_N = 9999;
+// Un sello con más de un día de adelanto viene de un reloj mal puesto: no se sigue, para que no
+// arrastre a todos los dispositivos hacia el futuro
+const ADELANTO_MAX = 864e5;
 function tick(){
   const now = Date.now() + clock.offset;
-  if (now > clock.ms){ clock.ms = now; clock.n = 0; } else clock.n++;
+  if (now > clock.ms){ clock.ms = now; clock.n = 0; }
+  else if (clock.n >= MAX_N){ clock.ms++; clock.n = 0; }
+  else clock.n++;
   return `${String(clock.ms).padStart(13, "0")}-${String(clock.n).padStart(4, "0")}-${clock.device}`;
 }
 // Al recibir cambios de otro dispositivo (Fase 2), el reloj avanza hasta ellos
 function seen(hlc){
   const [ms, n] = hlc.split("-"), m = +ms, k = +n;
+  if (m > now() + ADELANTO_MAX) return;
   if (m > clock.ms || (m === clock.ms && k > clock.n)){ clock.ms = m; clock.n = k; }
 }
 
