@@ -73,14 +73,13 @@ routerAdd("POST", "/api/sync", (e) => {
       }
     });
   }
-  // Lo rechazado se corrige con lo que tiene el servidor (o se borra si no existía), salvo
-  // que el servidor ya tenga algo más nuevo de ese registro, que igual le gana en el dispositivo
+  // Lo rechazado se corrige con lo que tiene el servidor, salvo que ya tenga algo más nuevo de ese
+  // registro, que igual le gana en el dispositivo. Si el servidor no lo tenía, no se borra: queda solo
+  // en el dispositivo que lo hizo (nunca se pierden datos), y no llega a los demás
   for (const x of rechazados) {
     if (!x.key) continue;
     const ahora = c.ultimo(tienda, x.store, x.key);
-    if (ahora && ahora.hlc > x.hlc) continue;
-    if (ahora && ahora.value) c.guardarCambio(tienda, x.store, ahora.value, null, parseInt(x.hlc, 10));
-    else c.guardarCambio(tienda, x.store, null, x.key, parseInt(x.hlc, 10));
+    if (ahora && ahora.value && ahora.hlc <= x.hlc) c.guardarCambio(tienda, x.store, ahora.value, null, parseInt(x.hlc, 10));
   }
 
   // Si el dispositivo trae un cursor más adelante que el servidor (por ejemplo, se
@@ -99,5 +98,6 @@ routerAdd("POST", "/api/sync", (e) => {
 
   if (nuevos) c.avisar(tienda);
 
-  return e.json(200, { hora: Date.now(), hasta: hasta, mas: out.length === LIMIT, cambios: out, rechazados: rechazados.length });
+  return e.json(200, { hora: Date.now(), hasta: hasta, mas: out.length === LIMIT, cambios: out, rechazados: rechazados.length,
+    rechazos: rechazados.filter((x) => x.key).map((x) => ({ store: x.store, key: x.key })) });
 });

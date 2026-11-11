@@ -137,6 +137,22 @@ async function applyRemote(changes){
 
 async function getMeta(key){ const db = await open(); return (await req(db.transaction("meta").objectStore("meta").get(key)))?.value; }
 async function setMeta(key, value){ const db = await open(), tx = db.transaction("meta", "readwrite"); tx.objectStore("meta").put({ key, value }); await done(tx); }
+// Lo que el servidor rechazó se guarda aparte antes de que llegue su corrección, para que nunca se
+// pierda: queda en este dispositivo y en sus respaldos (tabla meta, clave "rechazados")
+const MAX_RECHAZADOS = 500;
+async function guardarRechazados(lista){
+  const validos = (lista || []).filter(r => r && r.key && Object.prototype.hasOwnProperty.call(STORES, r.store) && r.store !== "meta");
+  if (!validos.length) return 0;
+  const db = await open(), tx = db.transaction([...new Set(validos.map(r => r.store)), "meta"], "readwrite");
+  const meta = tx.objectStore("meta"), antes = (await req(meta.get("rechazados")))?.value || [], nuevos = [];
+  for (const r of validos){
+    const value = await req(tx.objectStore(r.store).get(r.key));
+    if (value) nuevos.push({ store:r.store, key:r.key, value, at:Date.now() });
+  }
+  meta.put({ key:"rechazados", value:[...antes, ...nuevos].slice(-MAX_RECHAZADOS) });
+  await done(tx);
+  return nuevos.length;
+}
 async function pendingCount(){ const db = await open(); return req(db.transaction("outbox").objectStore("outbox").count()); }
 
 // Respaldo: todas las tablas y la bandeja de salida en un solo objeto
@@ -181,5 +197,5 @@ async function persist(){
     return navigator.storage?.persist ? await navigator.storage.persist() : false; } catch(e){ return false; }
 }
 
-window.LocalDB = { open, uuid, tick, seen, clock, now, loadAll, apply, getMeta, setMeta, pendingCount, outboxBatch, ack, applyRemote, exportAll, importAll, missing, wipe, persist };
+window.LocalDB = { open, uuid, tick, seen, clock, now, loadAll, apply, getMeta, setMeta, guardarRechazados, pendingCount, outboxBatch, ack, applyRemote, exportAll, importAll, missing, wipe, persist };
 })();

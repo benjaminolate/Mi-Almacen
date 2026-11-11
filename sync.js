@@ -46,6 +46,8 @@ async function cycle(){
         const offset = Math.round(res.hora - (t0 + Date.now()) / 2);
         if (Math.abs(offset - LocalDB.clock.offset) > 1000){ LocalDB.clock.offset = offset; await LocalDB.setMeta("offset", offset); }
         await LocalDB.ack(batch.map(c => c.seq));
+        // Antes de aplicar las correcciones del servidor, se guarda una copia de lo rechazado
+        await LocalDB.guardarRechazados(res.rechazos);
         changed += await LocalDB.applyRemote(res.cambios || []);
         if (res.rechazados) state.onRechazo?.(res.rechazados);
         await LocalDB.setMeta("cursor", res.hasta);

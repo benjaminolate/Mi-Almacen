@@ -74,6 +74,10 @@ async function navegador(){ return chromium.launch(); }
 // Un "dispositivo": su propio navegador aislado, con tamaño de celular
 async function dispositivo(browser, opciones = {}){
   const ctx = await browser.newContext(Object.assign({ viewport:{ width:360, height:740 }, deviceScaleFactor:1, acceptDownloads:true }, opciones));
+  // Fuera de este computador no se pide nada (letras de Google, lector de códigos): en GitHub una de
+  // esas descargas se demoró y la página no terminó de cargar. Así además se prueba que la app no
+  // depende de ellas.
+  await ctx.route(u => !/^http:\/\/127\.0\.0\.1[:/]/.test(u.href), r => r.abort());
   const page = await ctx.newPage();
   page.errores = [];
   page.on("pageerror", e => page.errores.push(e.message));
