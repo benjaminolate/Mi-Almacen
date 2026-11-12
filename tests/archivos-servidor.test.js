@@ -15,7 +15,7 @@ test("el servidor solo entrega los archivos de la app", { skip:falta || false },
   fs.writeFileSync(respaldo, JSON.stringify({ app:"mi-almacen", tablas:{} }));
   const pb = await h.prenderServidor(), browser = await h.navegador();
   try {
-    for (const ruta of ["/", "/index.html", "/tienda.html", "/sw.js", "/local-db.js", "/sync.js", "/catalogos.js", "/pagina.js",
+    for (const ruta of ["/", "/index.html", "/estilos.css", "/tienda.html", "/sw.js", "/local-db.js", "/sync.js", "/catalogos.js", "/pagina.js",
       "/qr.js", "/manifest.webmanifest", "/icons/icon.svg", "/icons/icon-192.png", "/icons/icon-512.png", "/icons/icon-maskable-512.png",
       "/api/sync/estado"])
       assert.equal(await estado(pb.url, ruta), 200, ruta);

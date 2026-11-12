@@ -13,7 +13,8 @@ en **español simple**.
 
 | Archivo | Qué hace |
 |---|---|
-| `index.html` | Toda la app (~3.000 líneas): estilos, pantallas (`view*`), acciones (`act.*`) y arranque. `S` es la copia en memoria; todo cambio pasa por `commit()` → `LocalDB.apply()`. |
+| `index.html` | Toda la app (~2.900 líneas): pantallas (`view*`), acciones (`act.*`) y arranque. `S` es la copia en memoria; todo cambio pasa por `commit()` → `LocalDB.apply()`. |
+| `estilos.css` | Los estilos de la app (los colores de cada paleta se ponen aparte, en `<style id="tema">`). |
 | `local-db.js` | `window.LocalDB`: IndexedDB `mi-almacen` (versión 2), bandeja de salida (`outbox`), reloj lógico `hlc`, respaldo (`exportAll`/`importAll`/`missing`). |
 | `sync.js` | `window.Sync`: envía la bandeja a `POST /api/sync`, aplica lo recibido, tiempo real por `/api/realtime` y revisión cada 30 s. |
 | `catalogos.js` | Productos típicos por tipo de negocio, sin precio. |
