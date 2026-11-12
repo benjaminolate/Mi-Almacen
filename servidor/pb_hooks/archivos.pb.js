@@ -22,8 +22,15 @@ routerUse((e) => {
   const path = String(e.request.url.path || "/");
   if (path.indexOf("/api/") === 0 || path.indexOf("/_/") === 0) return e.next();
   // La lista va aquí dentro porque en PocketBase cada pedido corre por separado
-  const APP = ["/", "/index.html", "/estilos.css", "/app.js", "/tienda.html", "/sw.js", "/local-db.js", "/sync.js", "/catalogos.js", "/pagina.js", "/qr.js",
-    "/manifest.webmanifest", "/icons/icon.svg", "/icons/icon-192.png", "/icons/icon-512.png", "/icons/icon-maskable-512.png"];
+  const APP = [
+    "/", "/index.html", "/estilos.css", "/js/base.js", "/js/acciones.js", "/js/escaner.js",
+    "/js/navegacion.js", "/js/vender.js", "/js/inventario.js", "/js/fiados.js", "/js/pan.js",
+    "/js/vitrina.js", "/js/extras-venta.js", "/js/gestion.js", "/js/resumen.js", "/js/ayuda.js",
+    "/js/ajustes.js", "/js/datos.js", "/js/render.js", "/js/abrir.js", "/js/cuentas.js", "/js/arranque.js",
+    "/tienda.html", "/sw.js", "/local-db.js", "/sync.js", "/catalogos.js", "/pagina.js", "/qr.js",
+    "/manifest.webmanifest", "/icons/icon.svg", "/icons/icon-192.png", "/icons/icon-512.png",
+    "/icons/icon-maskable-512.png"
+  ];
   if (APP.indexOf(path) >= 0) return e.next();
   throw new NotFoundError("No existe.");
 });
