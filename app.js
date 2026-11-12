@@ -1,5 +1,6 @@
-(function(){
 "use strict";
+// La app ya no vive en una función cerrada: así puede repartirse en varios archivos que comparten
+// los mismos nombres. Ningún nombre de aquí puede pisar uno del navegador (lo revisa tests/globales.test.js).
 const H = 3600e3, D = 24*H;
 // Las reservas son del día: se borran solas a las 3 de la mañana
 const RES_CUT_HOUR = 3;
@@ -2843,4 +2844,3 @@ openStore().catch(e => { console.error(e);
   gate(`${gateHead()}<div class="card stack"><h2>No se pudo abrir la base de datos</h2><p style="margin:0">${esc(friendly(e))}</p>
     <p class="small muted" style="margin:0">Si estás en una ventana privada o de incógnito, abre la app en una ventana normal.</p>
     <button class="btn primary block" onclick="location.reload()">Reintentar</button></div>`); });
-})();
