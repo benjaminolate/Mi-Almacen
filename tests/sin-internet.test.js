@@ -18,6 +18,8 @@ test("la app abre y vende sin internet", async () => {
     await page.reload();
     await page.waitForSelector("#tabs [data-view]");
     assert.match(await page.textContent("header"), /Almacén Sin Red/);
+    // Los estilos (estilos.css) también vienen de la copia guardada
+    assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector("nav.tabs")).position), "fixed");
     await h.venderUno(page, "azucar", 1200);
     assert.equal((await h.ventas(page)).length, 2, "no quedaron las dos ventas");
 
