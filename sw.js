@@ -7,7 +7,7 @@
 //
 // Al cambiar cualquier archivo de la app, sube VERSION para que todos los
 // dispositivos descarguen la copia nueva.
-const VERSION = "v24";
+const VERSION = "v25";
 const APP = "app-" + VERSION, EXT = "externos-v1";
 const FILES = ["./", "estilos.css", "app.js", "local-db.js", "catalogos.js", "sync.js", "pagina.js", "qr.js", "manifest.webmanifest", "icons/icon.svg", "icons/icon-192.png", "icons/icon-512.png", "icons/icon-maskable-512.png"];
 

@@ -84,8 +84,9 @@ PB_BIN=/ruta/a/pocketbase npm test             # PocketBase 0.40.5
   y lo dicen. En GitHub no se pueden saltar (`PB_OBLIGATORIO=1`).
 - Cada prueba prende su propio PocketBase con datos temporales; nunca usa `mi-almacen-datos`.
 - `tests/ayuda.js` tiene lo compartido: servir la app, crear una tienda, vender, sincronizar.
-  La app vive dentro de una función cerrada en `app.js`: las pruebas la manejan con clics
-  y leen los datos con `window.LocalDB` y `window.Sync`.
+  Las pruebas manejan la app con clics y leen los datos con `window.LocalDB` y `window.Sync`.
+- Los nombres de `app.js` se comparten entre archivos (no hay función cerrada). Ninguno puede
+  llamarse como algo del navegador (`print`, `open`, `close`…): lo revisa `globales.test.js`.
 - Las capturas quedan en `tests/capturas/` (no se suben; en GitHub se guardan como artefacto).
 - Toda función nueva o arreglo trae su prueba. Ninguna prueba se desactiva para que pase.
 
