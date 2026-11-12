@@ -13,7 +13,8 @@ en **español simple**.
 
 | Archivo | Qué hace |
 |---|---|
-| `index.html` | Toda la app (~2.900 líneas): pantallas (`view*`), acciones (`act.*`) y arranque. `S` es la copia en memoria; todo cambio pasa por `commit()` → `LocalDB.apply()`. |
+| `index.html` | La página principal: carga los estilos y los scripts, en orden. |
+| `app.js` | Toda la app (~2.850 líneas): pantallas (`view*`), acciones (`act.*`) y arranque. `S` es la copia en memoria; todo cambio pasa por `commit()` → `LocalDB.apply()`. |
 | `estilos.css` | Los estilos de la app (los colores de cada paleta se ponen aparte, en `<style id="tema">`). |
 | `local-db.js` | `window.LocalDB`: IndexedDB `mi-almacen` (versión 2), bandeja de salida (`outbox`), reloj lógico `hlc`, respaldo (`exportAll`/`importAll`/`missing`). |
 | `sync.js` | `window.Sync`: envía la bandeja a `POST /api/sync`, aplica lo recibido, tiempo real por `/api/realtime` y revisión cada 30 s. |
@@ -40,7 +41,7 @@ en **español simple**.
 - **Movimientos (`movs`) no se editan.** La app solo los crea.
 - Permisos: dueño, encargado y vendedor, más permisos extra (`precios`, `costos`, `inventario`,
   `reportes`, `config`). La regla que vale es la de `permite()` en el servidor; `data-perm` y
-  `puede()` en `index.html` solo ordenan la pantalla.
+  `puede()` en `app.js` solo ordenan la pantalla.
 - En `pb_hooks`, cada pedido corre aparte: las funciones compartidas se cargan con
   `require(\`${__hooks}/archivo.js\`)` dentro de cada ruta. El código del servidor corre en el motor
   JavaScript de PocketBase (no es Node ni el navegador): antes de usar una función, revisa que exista
@@ -83,7 +84,7 @@ PB_BIN=/ruta/a/pocketbase npm test             # PocketBase 0.40.5
   y lo dicen. En GitHub no se pueden saltar (`PB_OBLIGATORIO=1`).
 - Cada prueba prende su propio PocketBase con datos temporales; nunca usa `mi-almacen-datos`.
 - `tests/ayuda.js` tiene lo compartido: servir la app, crear una tienda, vender, sincronizar.
-  La app vive dentro de una función cerrada en `index.html`: las pruebas la manejan con clics
+  La app vive dentro de una función cerrada en `app.js`: las pruebas la manejan con clics
   y leen los datos con `window.LocalDB` y `window.Sync`.
 - Las capturas quedan en `tests/capturas/` (no se suben; en GitHub se guardan como artefacto).
 - Toda función nueva o arreglo trae su prueba. Ninguna prueba se desactiva para que pase.

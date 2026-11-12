@@ -83,7 +83,9 @@ Cómo prenderlo: [servidor/INSTRUCCIONES.md](servidor/INSTRUCCIONES.md).
 
 | Archivo | Qué es |
 |---|---|
-| `index.html` | Toda la app: estilos, pantallas y acciones |
+| `index.html` | La página principal: carga estilos y scripts |
+| `app.js` | Toda la app: pantallas y acciones |
+| `estilos.css` | Los estilos de la app |
 | `catalogos.js` | Productos típicos de cada tipo de negocio (sin precios) |
 | `tienda.html` | Página pública de la tienda, para los clientes |
 | `pagina.js` | Tipos e íconos de los links de la página de la tienda (vienen de Inventario_almacen_VD) |
