@@ -954,9 +954,9 @@ function viewRecibir(){
     <div class="list card" id="res" style="padding-block:0" hidden></div>
     <div class="card">
       <h3>Productos recibidos</h3>
-      ${ui.recv.items.length ? ui.recv.items.map((l,i) => { const p = P(l.pid), s = stockOf(p), cj = l.caja; return `<div class="countrow" style="grid-template-columns:1fr 80px 96px"><div style="min-width:0"><div style="font-weight:600">${esc(p.name)}</div><div class="small muted">Stock actual: ${s == null ? "sin contar" : fq(p, s)}${l.cost > 0 ? "" : ' · <span class="pill warn">Sin costo</span>'}</div></div>
+      ${ui.recv.items.length ? ui.recv.items.map((l,i) => { const p = P(l.pid), s = stockOf(p), cj = l.caja; return `<div class="countrow" style="grid-template-columns:1fr 80px 96px"><div style="min-width:0"><div style="font-weight:600">${esc(p.name)}</div><div class="small muted">Stock actual: ${s == null ? "sin contar" : fq(p, s)}${l.cost > 0 || !puede("costos") ? "" : ' · <span class="pill warn">Sin costo</span>'}</div></div>
         <input class="input" type="number" min="0" ${p.kg ? `step="any" inputmode="decimal"` : `step="1" inputmode="numeric"`} value="${esc(l.qty)}" data-rq="${esc(i)}" aria-label="Cantidad${p.kg ? " en kilos" : ""}" ${cj ? "disabled" : ""}>
-        <input class="input" type="number" min="0" inputmode="numeric" value="${esc(l.cost)}" data-rc="${esc(i)}" aria-label="Costo ${p.kg ? "por kilo" : "unitario"}" ${cj ? "disabled" : ""}>
+        <input class="input" type="number" min="0" inputmode="numeric" value="${esc(l.cost || (puede("costos") ? 0 : ""))}" placeholder="$" data-rc="${esc(i)}" aria-label="Costo ${p.kg ? "por kilo" : "unitario"}" ${cj ? "disabled" : ""}>
         ${p.kg ? "" : `<div class="opts"><label><input type="checkbox" data-rcaja="${esc(i)}" ${cj ? "checked" : ""}> Por caja</label>
           ${cj ? `<input class="input" type="number" min="0" inputmode="numeric" data-rcn="${esc(i)}" value="${esc(cj.n || "")}" placeholder="cajas" aria-label="Cajas" style="width:64px;font-size:14px;padding:6px">
           × <input class="input" type="number" min="2" max="1000" step="1" inputmode="numeric" data-rcu="${esc(i)}" value="${esc(cj.por || "")}" placeholder="unid." aria-label="Unidades por caja" style="width:64px;font-size:14px;padding:6px">
@@ -2125,11 +2125,11 @@ function viewResumen(){
     <div class="chips">${Object.entries(PERIODOS).map(([key, v]) => `<button class="chip" data-per="${esc(key)}" aria-pressed="${key === k}">${v}</button>`).join("")}</div>
     <div class="kpis">
       <div class="card kpi"><div class="num">${clp(r.total)}</div><div class="lbl">vendido · ${r.ventas} ${r.ventas === 1 ? "venta" : "ventas"}</div></div>
-      <div class="card kpi" data-perm="costos"><div class="num">${clp(r.gan)}</div><div class="lbl">ganancia estimada</div></div>
+      ${puede("costos") ? `<div class="card kpi"><div class="num">${clp(r.gan)}</div><div class="lbl">ganancia estimada</div></div>` : ""}
       <div class="card kpi"><div class="num">${clp(r.ventas ? r.total / r.ventas : 0)}</div><div class="lbl">promedio por venta</div></div>
       <div class="card kpi"><div class="num">${r.top.length ? esc(fq(P(r.top[0][0]), r.top[0][1].q)) : "—"}</div><div class="lbl">${r.top.length ? esc(P(r.top[0][0]).name) : "lo más vendido"}</div></div>
     </div>
-    ${r.sinCosto ? `<p class="small muted" style="margin:0">La ganancia usa el costo actual de cada producto. ${r.sinCosto} ${r.sinCosto === 1 ? "producto vendido no tiene" : "productos vendidos no tienen"} costo y no ${r.sinCosto === 1 ? "entra" : "entran"} en la cuenta.</p>` : ""}
+    ${r.sinCosto && puede("costos") ? `<p class="small muted" style="margin:0">La ganancia usa el costo actual de cada producto. ${r.sinCosto} ${r.sinCosto === 1 ? "producto vendido no tiene" : "productos vendidos no tienen"} costo y no ${r.sinCosto === 1 ? "entra" : "entran"} en la cuenta.</p>` : ""}
     ${r.ms.length ? `
     ${Object.keys(r.pago).some(x => x !== "sin") ? `<div class="card"><h3>Por medio de pago</h3>${Object.entries(r.pago).sort((x, y) => y[1] - x[1]).map(([x, v]) => bar(x === "sin" ? "Sin anotar" : PAGOS_CORTO[x], v, maxPago)).join("")}</div>` : ""}
     ${keys.length > 1 ? `<div class="card"><h3>${r.porMes ? "Por mes" : "Por día"}</h3>${keys.map(x => bar(r.porMes ? MESES[x] : new Date(x + "T12:00").toLocaleDateString("es-CL", { weekday:"short", day:"numeric" }), r.tramos[x], max)).join("")}</div>` : ""}
@@ -2144,7 +2144,7 @@ function bindResumen(app){
 function descargarExcel(){
   const k = ui.resPer, r = resumen(k), nombre = S.ajustes.tienda_nombre || "Mi Almacén";
   const res = [[nombre + " · Resumen de ventas"], ["Período", PERIODOS[k]], ["Descargado", new Date().toLocaleString("es-CL")], [],
-    ["Total vendido", Math.round(r.total)], ["Ventas", r.ventas], ["Promedio por venta", Math.round(r.ventas ? r.total / r.ventas : 0)], ["Ganancia estimada", Math.round(r.gan)], [],
+    ["Total vendido", Math.round(r.total)], ["Ventas", r.ventas], ["Promedio por venta", Math.round(r.ventas ? r.total / r.ventas : 0)], ...(puede("costos") ? [["Ganancia estimada", Math.round(r.gan)]] : []), [],
     ["Medio de pago", "Total"], ...Object.entries(r.pago).map(([x, v]) => [x === "sin" ? "Sin anotar" : PAGOS[x], Math.round(v)]), [],
     ["Producto", "Cantidad", "Total"], ...r.top.map(([id, x]) => [P(id).name, r3(x.q), Math.round(x.t)])];
   const ventas = [["Fecha", "Hora", "Producto", "Sector", "Cantidad", "Precio", "Descuento", "Total", "Medio de pago", "Atendió"],
