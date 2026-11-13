@@ -166,3 +166,10 @@ nav.tabs button[aria-current="page"]{color:var(--brand)}
 :root[data-fuente="legible"]{--font-display:"Atkinson Hyperlegible",system-ui,sans-serif;--font-body:"Atkinson Hyperlegible",system-ui,sans-serif}
 @media (max-width:380px){.kpi .num{font-size:24px}.grid2{grid-template-columns:1fr}}
 @media (prefers-reduced-motion:no-preference){.sheet{animation:up .18s ease-out}@keyframes up{from{transform:translateY(24px);opacity:.6}}}
+/* Zonas táctiles de al menos 44 px: con dedos grandes o el celular en una mano, lo chico se erra */
+.btn,.chip,.seg button,.input{min-height:44px}
+.btn.sm,.chip{min-width:44px}
+a.btn{display:inline-flex;align-items:center;justify-content:center}
+.stepper button{width:44px;height:44px}
+label.row{min-height:44px}
+.countrow .linkbtn{display:inline-flex;align-items:center;min-height:44px}

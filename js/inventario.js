@@ -17,7 +17,7 @@ function viewRecibir(){
       ${ui.recv.items.length ? ui.recv.items.map((l,i) => { const p = P(l.pid), s = stockOf(p), cj = l.caja; return `<div class="countrow" style="grid-template-columns:1fr 80px 96px"><div style="min-width:0"><div style="font-weight:600">${esc(p.name)}</div><div class="small muted">Stock actual: ${s == null ? "sin contar" : fq(p, s)}${l.cost > 0 || !puede("costos") ? "" : ' · <span class="pill warn">Sin costo</span>'}</div></div>
         <input class="input" type="number" min="0" ${p.kg ? `step="any" inputmode="decimal"` : `step="1" inputmode="numeric"`} value="${esc(l.qty)}" data-rq="${esc(i)}" aria-label="Cantidad${p.kg ? " en kilos" : ""}" ${cj ? "disabled" : ""}>
         <input class="input" type="number" min="0" inputmode="numeric" value="${esc(l.cost || (puede("costos") ? 0 : ""))}" placeholder="$" data-rc="${esc(i)}" aria-label="Costo ${p.kg ? "por kilo" : "unitario"}" ${cj ? "disabled" : ""}>
-        ${p.kg ? "" : `<div class="opts"><label><input type="checkbox" data-rcaja="${esc(i)}" ${cj ? "checked" : ""}> Por caja</label>
+        ${p.kg ? "" : `<div class="opts"><label class="row"><input type="checkbox" data-rcaja="${esc(i)}" ${cj ? "checked" : ""}> Por caja</label>
           ${cj ? `<input class="input" type="number" min="0" inputmode="numeric" data-rcn="${esc(i)}" value="${esc(cj.n || "")}" placeholder="cajas" aria-label="Cajas" style="width:64px;font-size:14px;padding:6px">
           × <input class="input" type="number" min="2" max="1000" step="1" inputmode="numeric" data-rcu="${esc(i)}" value="${esc(cj.por || "")}" placeholder="unid." aria-label="Unidades por caja" style="width:64px;font-size:14px;padding:6px">
           a <input class="input" type="number" min="0" inputmode="numeric" data-rcp="${esc(i)}" value="${esc(cj.precio || "")}" placeholder="$ caja" aria-label="Precio de la caja" style="width:88px;font-size:14px;padding:6px">` : ""}</div>`}
@@ -58,7 +58,7 @@ function viewContar(){
       ${ps.map(p => { const d = ui.draft[p.id] || {}; const off = d.none ?? !p.has; const prev = stockOf(p);
         return `<div class="countrow ${off?"off":""}"><div style="min-width:0"><button class="linkbtn" data-cprod="${esc(p.id)}" style="font-weight:600">${esc(p.name)}</button><div class="small muted">${off ? "No lo tenemos" : prev==null ? "Sin contar" : `Sistema dice: ${fq(p, prev)}${p.estimated?" (aprox.)":""}`}</div></div>
           <input class="input" type="number" min="0" ${p.kg ? `step="any" inputmode="decimal"` : `inputmode="numeric"`} placeholder="${p.kg ? "kg" : "—"}" value="${esc(d.qty ?? "")}" data-cq="${esc(p.id)}" ${off?"disabled":""} aria-label="Cantidad de ${esc(p.name)}">
-          <div class="opts"><label><input type="checkbox" data-ce="${esc(p.id)}" ${d.est?"checked":""} ${off?"disabled":""}> Es aproximado</label>
+          <div class="opts"><label class="row"><input type="checkbox" data-ce="${esc(p.id)}" ${d.est?"checked":""} ${off?"disabled":""}> Es aproximado</label>
           ${p.kg || off ? "" : `<button class="btn sm" data-cbox="${esc(p.id)}">Cajas ×</button>`}
           <button class="btn sm ghost" data-cn="${esc(p.id)}">${off ? "Sí lo tenemos" : "No lo tenemos"}</button></div></div>`; }).join("")}
     </div>
