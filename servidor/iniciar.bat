@@ -15,6 +15,7 @@ echo.
 echo  Servidor de Mi Almacen
 echo  - En este computador abre:  http://localhost:8090
 echo  - En los celulares (mismo wifi) abre:  http://IP-DE-ESTE-COMPUTADOR:8090
+echo  - Panel de administracion ^(solo desde el wifi^):  http://IP-DE-ESTE-COMPUTADOR:8090/_/
 echo  Para apagarlo, cierra esta ventana.
 echo.
 pocketbase.exe serve --http=0.0.0.0:8090 --dir="%~dp0..\..\mi-almacen-datos" --publicDir=.. --hooksDir=pb_hooks --migrationsDir=pb_migrations
