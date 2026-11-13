@@ -7,7 +7,7 @@
 //
 // Al cambiar cualquier archivo de la app, sube VERSION para que todos los
 // dispositivos descarguen la copia nueva.
-const VERSION = "v28";
+const VERSION = "v29";
 const APP = "app-" + VERSION, EXT = "externos-v1";
 const FILES = [
   "./", "estilos.css", "js/base.js", "js/acciones.js", "js/escaner.js", "js/navegacion.js", "js/vender.js",
