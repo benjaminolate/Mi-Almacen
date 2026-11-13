@@ -45,7 +45,7 @@ p{margin:0}
 .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .spread{display:flex;justify-content:space-between;align-items:center;gap:8px}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px}
-.btn{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:10px 14px;font-weight:600;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.btn{border:1px solid var(--line);background:var(--surface);color:var(--fg);border-radius:10px;padding:10px 14px;font-weight:600;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:6px}
 .btn.primary{background:var(--brand);color:var(--brand-fg);border-color:var(--brand)}
 .btn.block{width:100%} .btn.sm{padding:6px 10px;font-size:13px}
 .btn:disabled{opacity:.55;cursor:default}
@@ -120,7 +120,7 @@ async function load(){
   try { T = await api(""); }
   catch(e){ return fail(e.status === 404 ? e.message : "No se pudo conectar con la tienda. Puede que su computador esté apagado o sin internet. Intenta de nuevo en un rato.", true); }
   document.title = T.nombre || "Tienda";
-  if (T.color && /^#[0-9a-f]{6}$/i.test(T.color) && !matchMedia("(prefers-color-scheme: dark)").matches){ document.documentElement.style.setProperty("--brand", T.color); $('meta[name="theme-color"]').content = T.color; }
+  if (T.color && /^#[0-9a-f]{6}$/i.test(T.color) && !matchMedia("(prefers-color-scheme: dark)").matches){ document.documentElement.style.setProperty("--brand", T.color); document.documentElement.style.setProperty("--brand-fg", PAGINA.letraSobre(T.color)); $('meta[name="theme-color"]').content = T.color; }
   render(); misReservas();
 }
 function fail(msg, retry){

@@ -1,5 +1,6 @@
 // Tipos de links de la página pública de la tienda (tienda.html). Viene de Inventario_almacen_VD.
-// Lo usan la página pública para mostrarlos y la app para editarlos.
+// Lo usan la página pública para mostrarlos y la app para editarlos. También el color de la letra
+// sobre el color de la tienda, que necesitan las dos.
 (function(){
 "use strict";
 const svg = d => `<svg viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`;
@@ -38,5 +39,10 @@ function href(l){
   if (/^https?:\/\//i.test(v)) return v;
   return "https://" + v.replace(/^[a-z]+:\/*/i, "");
 }
-window.PAGINA = { ICONS, TIPOS, tipo, href };
+// La letra sobre el color de la tienda: la oscura o la blanca, la que más se lea. Con un corte fijo,
+// los colores claros quedaban con letra blanca y casi no se leían.
+const lum = h => { const [r,g,b] = [1,3,5].map(i => parseInt(h.slice(i, i+2), 16) / 255).map(x => x <= .03928 ? x/12.92 : ((x+.055)/1.055) ** 2.4); return .2126*r + .7152*g + .0722*b; };
+const contraste = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + .05) / (y + .05); };
+const letraSobre = h => contraste(h, "#14201a") >= contraste(h, "#ffffff") ? "#14201a" : "#ffffff";
+window.PAGINA = { ICONS, TIPOS, tipo, href, letraSobre };
 })();

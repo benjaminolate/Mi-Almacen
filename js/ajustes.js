@@ -69,11 +69,6 @@ const LETRAS = { normal:"Normal", grande:"Grande" };
 const hexRgb = h => [1,3,5].map(i => parseInt(h.slice(i, i+2), 16));
 const rgbHex = c => "#" + c.map(x => Math.round(Math.max(0, Math.min(255, x))).toString(16).padStart(2, "0")).join("");
 const mix = (a, b, t) => rgbHex(hexRgb(a).map((x, i) => x + (hexRgb(b)[i] - x) * t));
-const lum = h => { const [r,g,b] = hexRgb(h).map(x => { x /= 255; return x <= .03928 ? x/12.92 : ((x+.055)/1.055) ** 2.4; }); return .2126*r + .7152*g + .0722*b; };
-const contraste = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + .05) / (y + .05); };
-// La letra sobre el color de la tienda: la que más se lea. Con un corte fijo, los verdes y azules
-// claros del modo oscuro quedaban con letra blanca y casi no se leían.
-const onColor = h => contraste(h, "#14201a") >= contraste(h, "#ffffff") ? "#14201a" : "#ffffff";
 const apariencia = () => Object.assign({}, APARIENCIA_ORIGINAL, S?.ajustes?.apariencia || {});
 const prefs = () => Object.assign({ modo:"auto", letra:"normal" }, meta.prefs || {});
 function colores(a){
@@ -83,7 +78,7 @@ function colores(a){
 }
 function applyTheme(){
   const a = apariencia(), p = prefs(), c = colores(a), root = document.documentElement;
-  const vars = (brand, accent, bg) => `--brand:${brand};--brand-fg:${onColor(brand)};--accent:${accent};--accent-soft:${mix(accent, bg, .78)};`;
+  const vars = (brand, accent, bg) => `--brand:${brand};--brand-fg:${PAGINA.letraSobre(brand)};--accent:${accent};--accent-soft:${mix(accent, bg, .78)};`;
   $("#tema").textContent = `:root{${vars(c.brand, c.accent, "#f4f6f1")}}
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){${vars(c.brandD, c.accentD, "#121814")}}}
 :root[data-theme="dark"]{${vars(c.brandD, c.accentD, "#121814")}}`;
