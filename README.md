@@ -84,7 +84,7 @@ Cómo prenderlo: [servidor/INSTRUCCIONES.md](servidor/INSTRUCCIONES.md).
 | Archivo | Qué es |
 |---|---|
 | `index.html` | La página principal: carga estilos y scripts |
-| `app.js` | Toda la app: pantallas y acciones |
+| `js/` | La app, repartida en archivos por tema (pantallas, acciones, arranque) |
 | `estilos.css` | Los estilos de la app |
 | `catalogos.js` | Productos típicos de cada tipo de negocio (sin precios) |
 | `tienda.html` | Página pública de la tienda, para los clientes |
