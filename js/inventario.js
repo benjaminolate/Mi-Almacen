@@ -38,13 +38,14 @@ function viewContar(){
   if (!ui.sector){
     return `${header("Contar sector", "Carga del stock, un sector a la vez")}
     <div class="stack">
-      <p class="muted" style="margin:0">Elige el sector que vas a contar ahora. Lo ideal es contar al abrir o al cerrar, unos 20 a 30 minutos por sector.</p>
+      ${S.products.some(disp) ? `<p class="muted" style="margin:0">Elige el sector que vas a contar ahora. Lo ideal es contar al abrir o al cerrar, unos 20 a 30 minutos por sector.</p>` : ""}
       ${sectores().filter(c => S.products.some(p => p.cat === c && disp(p))).map(c => { const ps = S.products.filter(p => p.cat===c && disp(p)); const done = ps.filter(p => p.countAt!=null);
         const last = done.length ? Math.max(...done.map(p=>p.countAt)) : null;
-        const sold = ps.filter(p => p.countAt==null).reduce((a,p)=>a+pendingSales(p),0);
+        const sold = ps.filter(p => p.countAt==null).reduce((a,p)=>a+ventasDe(p),0);
         return `<button class="sector" data-sector="${esc(c)}"><span class="name">${esc(c)}</span>
           ${done.length===ps.length ? `<span class="pill ok">Contado</span>` : done.length ? `<span class="pill warn">${done.length}/${ps.length}</span>` : `<span class="pill none">Sin contar</span>`}
-          <span class="sub">${ps.length} productos · ${last ? "último conteo " + ago(last) : `${sold} ventas registradas mientras tanto`}</span></button>`; }).join("")}
+          <span class="sub">${ps.length} productos · ${last ? "último conteo " + ago(last) : `${sold} ${sold === 1 ? "venta registrada" : "ventas registradas"} mientras tanto`}</span></button>`; }).join("")
+      || `<div class="card stack"><h3>Todavía no hay productos para contar</h3><p class="small muted" style="margin:0">Agrega tus productos y después vuelve aquí para contar cuánto tienes de cada uno.</p><button class="btn primary block" data-go="productos">Agregar productos</button></div>`}
     </div>`;
   }
   const ps = S.products.filter(p => p.cat === ui.sector);

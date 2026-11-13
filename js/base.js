@@ -269,7 +269,8 @@ function stockOf(p){
     if (m.type === "compra") s += m.qty; else if (m.type === "venta") s -= m.qty; }
   return r3(s);
 }
-function pendingSales(p){ return S.movs.filter(m => m.pid === p.id && m.type === "venta").reduce((a,m)=>a+m.qty,0); }
+// Cuántas ventas tiene el producto (no cuántas unidades: el pan por kilo sumaba kilos)
+function ventasDe(p){ return S.movs.filter(m => m.pid === p.id && m.type === "venta").length; }
 function ago(t){
   const d0 = new Date(); d0.setHours(0,0,0,0);
   const hm = new Date(t).toLocaleTimeString("es-CL",{hour:"2-digit",minute:"2-digit",hourCycle:"h23"});
