@@ -11,6 +11,7 @@ echo ""
 echo " Servidor de Mi Almacén"
 echo " - En este computador abre:  http://localhost:8090"
 echo " - En los celulares (mismo wifi) abre:  http://IP-DE-ESTE-COMPUTADOR:8090"
+echo " - Panel de administración (solo desde el wifi):  http://IP-DE-ESTE-COMPUTADOR:8090/_/"
 echo " Para apagarlo, presiona Ctrl+C."
 echo ""
 exec ./pocketbase serve --http=0.0.0.0:8090 --dir=../../mi-almacen-datos --publicDir=.. --hooksDir=pb_hooks --migrationsDir=pb_migrations

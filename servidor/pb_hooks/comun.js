@@ -50,11 +50,15 @@ function guardarCambio(tienda, store, value, del, desdeMs) {
   }
 }
 
-// ¿El pedido viene desde internet (por el túnel) o desde el mismo computador o el wifi?
-// Se mira la dirección que escribió el navegador: en el wifi es localhost o una IP privada.
+// ¿El pedido viene de internet? Solo cuenta como "de la casa" lo que llega directo desde otro
+// equipo del wifi. No se mira el encabezado Host: lo escribe quien pide, y bastaba con poner
+// "localhost" para abrir el panel desde internet. Los túneles (Tailscale, Cloudflare) y Caddy en un
+// VPS entregan todo desde este mismo computador (127.0.0.1), así que eso también cuenta como internet.
 function desdeInternet(e) {
-  const host = String(e.request.host || "").toLowerCase().replace(/:\d+$/, "");
-  return !/^(localhost|127\.\d+\.\d+\.\d+|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|\[::1\]|[a-z0-9-]+\.local)$/.test(host);
+  const h = (k) => String(e.request.header.get(k) || "");
+  if (h("X-Forwarded-For") || h("Forwarded") || h("X-Real-Ip") || h("Cf-Connecting-Ip") || h("Tailscale-Funnel-Request")) return true;
+  const ip = String(e.request.remoteAddr || "").replace(/:\d+$/, "").replace(/^\[|\]$/g, "").toLowerCase();
+  return !/^(10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|169\.254\.\d+\.\d+|f[cd][0-9a-f]{2}:[0-9a-f:]*|fe80:[0-9a-f:%a-z]*)$/.test(ip);
 }
 
 // IP del cliente: el túnel la manda en un encabezado; si no hay, la conexión directa
