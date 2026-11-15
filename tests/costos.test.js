@@ -22,7 +22,7 @@ test("quien no tiene el permiso de costos no los recibe, y no los borra al edita
       return p.id;
     }, { id:crypto.randomUUID(), type:"compra", qty:6, cost:650, at:Date.now() });
     const tienda = (await a.page.evaluate(() => LocalDB.getMeta("tienda"))).id;
-    const D = await h.activarCuentas(a.page);
+    const D = await h.tokenDueno(a.page);
     await h.api(pb.url, "/api/cuentas/miembros", { tienda, usuario:"vale", nombre:"Vale", password:"clave456", rol:"vendedor", permisos:{ precios:true, inventario:true } }, D);
 
     // La vendedora entra: no le llega ningún costo
@@ -70,14 +70,12 @@ test("reglas de costos del servidor", () => {
   // Sin permiso: lo que llega sin costo recupera el de antes; un costo anotado se respeta
   assert.equal(conCosto(sin, "products", { id:"p", price:1200 }, prev).cost, 700);
   assert.equal(conCosto(sin, "products", { id:"p", price:1200, cost:800 }, prev).cost, 800);
-  // Con permiso, sin cuentas o en otras tablas, no se toca
+  // Con permiso o en otras tablas, no se toca
   assert.equal(conCosto(con, "products", { id:"p" }, prev).cost, undefined);
-  assert.equal(conCosto(null, "products", { id:"p" }, prev).cost, undefined);
   assert.equal(conCosto(sin, "movs", { id:"m" }, prev).cost, undefined);
   // Al mandar: sin permiso se quita el costo de productos y movimientos
   assert.equal("cost" in sinCostos(sin, { store:"products", value:{ cost:1 } }).value, false);
   assert.equal("cost" in sinCostos(sin, { store:"movs", value:{ cost:1 } }).value, false);
   assert.equal(sinCostos(con, { store:"products", value:{ cost:1 } }).value.cost, 1);
-  assert.equal(sinCostos(null, { store:"products", value:{ cost:1 } }).value.cost, 1);
   assert.equal(sinCostos(sin, { store:"products", del:"p" }).del, "p");
 });

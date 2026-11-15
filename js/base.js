@@ -212,10 +212,11 @@ const EXT_TABLAS = ["vencimientos","cajas","proveedores","provmovs","ofertas","p
 // Guarda en la base local y actualiza el contador de cambios por enviar
 async function commit(list){ await LocalDB.apply(list); meta.pending = await LocalDB.pendingCount(); Sync.syncSoon(); }
 
-// Crea la tienda en este dispositivo. inicio: "catalogo" | "vacio" | "ejemplo"
-async function createStore(nombre, persona, inicio, extensiones, tipo){
+// Crea la tienda en este dispositivo. inicio: "catalogo" | "vacio" | "ejemplo". id: el código de la tienda,
+// si ya se eligió (el dueño crea su usuario en el servidor antes de crear la tienda aquí)
+async function createStore(nombre, persona, inicio, extensiones, tipo, id = uid()){
   const device = newDevice();
-  const tienda = { id: uid(), nombre, persona, creada: Date.now() };
+  const tienda = { id, nombre, persona, creada: Date.now() };
   let data;
   if (inicio === "ejemplo") data = buildSeed();
   else data = { products: inicio === "catalogo" ? catalogoNegocio(tipo || "almacen") : [], movs:[], clients:[], reservas:[],

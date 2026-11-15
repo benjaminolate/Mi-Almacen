@@ -1,7 +1,7 @@
 /// <reference path="../pb_data/types.d.ts" />
 // Cuentas y permisos (Fase 4).
 //
-// POST /api/cuentas/activar         el dueño activa las cuentas de su tienda y crea su usuario
+// POST /api/cuentas/activar         el dueño crea su usuario: al crear la tienda, o en una tienda de antes de las cuentas
 // POST /api/cuentas/entrar          entrar con usuario y contraseña
 // GET  /api/cuentas/yo              renueva la sesión y dice a qué tiendas tiene acceso
 // POST /api/cuentas/clave           cambiar la propia contraseña
@@ -18,8 +18,12 @@ routerAdd("POST", "/api/cuentas/activar", (e) => {
   const b = e.requestInfo().body || {};
   const tienda = String(b.tienda || "");
   if (!c.UUID.test(tienda)) throw new BadRequestError("Código de tienda no válido");
-  if ($app.countRecords("cambios", $dbx.hashExp({ tienda: tienda })) === 0) throw new BadRequestError("El servidor todavía no tiene los datos de esta tienda. Espera a que diga Sincronizado.");
   if (c.tieneMiembros(tienda)) throw new ForbiddenError("Esta tienda ya tiene cuentas. Entra con tu usuario o pídele uno al dueño.");
+  // Una tienda nueva para el servidor la crea quien la crea. Una que ya tiene datos y no tiene dueño es de
+  // antes de las cuentas: solo se activa desde el wifi, porque desde internet cualquiera que supiera su
+  // código habría podido quedarse con ella.
+  if ($app.countRecords("cambios", $dbx.hashExp({ tienda: tienda })) > 0 && c.desdeInternet(e))
+    throw new ForbiddenError("Esta tienda se creó antes de las cuentas. Para crear el usuario del dueño, conéctate al wifi de la tienda y abre la app con la IP del computador del servidor, no con localhost.");
   const usuario = k.usuarioValido(b.usuario), password = k.claveValida(b.password);
   let u = k.buscarUsuario(usuario);
   if (u && !u.validatePassword(password)) throw new BadRequestError("Ese usuario ya existe. Si es tuyo, escribe su contraseña; si no, elige otro.");

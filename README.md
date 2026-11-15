@@ -58,7 +58,7 @@ Dispositivo A ─┐   POST /api/sync: envía su bandeja y recibe lo nuevo     �
 - El servidor rechaza valores fuera de rango (precios negativos, fiados de más de $1.000.000, unidades por caja fuera de 2 a 1000) y vuelve a mandar lo que había. Solo revisa los campos que cambian, así que los registros antiguos se pueden seguir editando. Los celulares se revisan solo en la app, para que el servidor nunca borre un cliente con fiados.
 - El servidor también devuelve su hora: el dispositivo corrige su reloj si está desfasado.
 - Un dispositivo nuevo se une con un link de invitación (`?unirse=<código>&servidor=<dirección>`) y descarga todo.
-- Sin cuentas, el código de la tienda (un UUID) es la llave de acceso. Con cuentas, además se necesita un usuario de la tienda.
+- El código de la tienda (un UUID) solo no da acceso: además se necesita un usuario de la tienda (ver Cuentas y permisos).
 
 ## Página de la tienda y reservas por internet (Fase 3)
 
@@ -71,7 +71,8 @@ Dispositivo A ─┐   POST /api/sync: envía su bandeja y recibe lo nuevo     �
 
 ## Cuentas y permisos (Fase 4)
 
-- Son opcionales: el dueño las activa en Más > Cuentas y permisos. Desde ahí, cada dispositivo entra con usuario y contraseña (colección `usuarios` de PocketBase, sesión de 30 días que se renueva sola) y el código de la tienda ya no basta para sincronizar.
+- Toda tienda en el servidor tiene dueño: su usuario se crea al crear la tienda (o después en Más > Cuentas y permisos, si se creó sin conexión). El servidor no guarda ni entrega datos de una tienda sin dueño. Cada dispositivo entra con usuario y contraseña (colección `usuarios` de PocketBase, sesión de 30 días que se renueva sola). Una tienda sin servidor (un solo dispositivo) no usa cuentas.
+- `/api/cuentas/activar` crea el dueño de una tienda nueva para el servidor. Si el servidor ya tiene datos de esa tienda (es de antes de las cuentas), solo responde desde el wifi, para que nadie que sepa el código pueda quedarse con ella desde internet.
 - La colección `miembros` dice quién pertenece a qué tienda, con qué rol (dueño, encargado o vendedor) y qué permisos extra tiene un vendedor: precios, costos, inventario, reportes y ajustes.
 - `/api/sync` revisa cada cambio contra los permisos de quien lo manda. Un cambio sin permiso no se guarda y el servidor vuelve a mandar lo que había, para que ese dispositivo quede igual que los demás.
 - Funciona sin internet como antes: la sesión queda guardada en el dispositivo.

@@ -14,7 +14,8 @@ test("el servidor no deja editar una venta ya guardada", { skip:falta || false }
     await h.venderUno(page, "arroz", 1500);
     await h.esperarSincronizado(page);
     const tienda = (await page.evaluate(() => LocalDB.getMeta("tienda"))).id;
-    const envia = cambios => h.api(pb.url, "/api/sync", { tienda, device:"otro", desde:0, cambios });
+    const D = await h.tokenDueno(page);
+    const envia = cambios => h.api(pb.url, "/api/sync", { tienda, device:"otro", desde:0, cambios }, D);
 
     const venta = Object.values(h.ultimos((await envia([])).json.cambios, "movs")).find(m => m.type === "venta");
     assert.ok(venta, "no llegó la venta");

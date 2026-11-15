@@ -13,7 +13,7 @@ test("lo que el servidor rechaza no se borra del dispositivo", { skip:falta || f
     const a = await h.dispositivo(browser);
     await h.crearTienda(a.page, pb.url, "Almacén Rechazos");
     const tienda = (await a.page.evaluate(() => LocalDB.getMeta("tienda"))).id;
-    const D = await h.activarCuentas(a.page);
+    const D = await h.tokenDueno(a.page);
     await h.api(pb.url, "/api/cuentas/miembros", { tienda, usuario:"vale", nombre:"Vale", password:"clave456", rol:"vendedor", permisos:{} }, D);
 
     // Una vendedora sin permisos extra entra en otro celular

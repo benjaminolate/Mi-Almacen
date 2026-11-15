@@ -7,13 +7,12 @@
 //   3. Avisa en tiempo real a los otros dispositivos de la tienda (canal "tienda/<id>").
 //
 // Valores: un cambio con números fuera de rango (precios negativos, fiados de más de un
-// millón, packs de una unidad...) o que edita un movimiento ya guardado tampoco se guarda,
-// aunque la tienda no tenga cuentas.
+// millón, packs de una unidad...) o que edita un movimiento ya guardado tampoco se guarda.
 //
-// Acceso: una tienda sin cuentas se abre con su código (un UUID imposible de adivinar).
-// Cuando el dueño activa las cuentas (Fase 4), además hay que entrar con un usuario que
-// sea miembro de la tienda, y cada cambio se revisa contra sus permisos. Un cambio sin
-// permiso no se guarda: el servidor vuelve a mandar lo que había, para que el dispositivo
+// Acceso: hay que entrar con un usuario que sea miembro de la tienda. El código de la tienda
+// solo no basta: una tienda sin dueño no sincroniza hasta que el dueño crea su usuario
+// (/api/cuentas/activar). Cada cambio se revisa contra los permisos de quien lo manda. Un cambio
+// sin permiso no se guarda: el servidor vuelve a mandar lo que había, para que el dispositivo
 // que lo hizo quede igual que los demás.
 
 routerAdd("GET", "/api/sync/estado", (e) => {
@@ -32,12 +31,9 @@ routerAdd("POST", "/api/sync", (e) => {
   if (cambios.length > 500) throw new BadRequestError("Demasiados cambios en un solo envío");
 
   // ¿Quién es y qué puede hacer?
-  let P = null;
-  if (c.tieneMiembros(tienda)) {
-    const m = c.miembroDe(e, tienda);
-    if (!m) return e.json(401, { code: "cuenta", message: e.auth ? "Tu usuario no tiene acceso a esta tienda." : "Esta tienda usa cuentas: entra con tu usuario." });
-    P = c.permisosMiembro(m);
-  }
+  const no = c.sinAcceso(e, tienda);
+  if (no) return e.json(401, no);
+  const P = c.permisosMiembro(c.miembroDe(e, tienda));
 
   let nuevos = 0;
   const rechazados = [];
@@ -53,11 +49,10 @@ routerAdd("POST", "/api/sync", (e) => {
         const key = borra ? String(ch.del) : String((ch.store === "ajustes" ? (ch.value || {}).clave : (ch.value || {}).id) || "");
         // Un id con caracteres de código se rechaza sin corregir nada: ningún dispositivo de la tienda lo creó
         if (!c.ID.test(key)) { rechazados.push({ store: ch.store, key: "", hlc: hlc }); continue; }
-        // Lo que había solo se busca si hace falta: con cuentas, en movimientos (no se editan), o si el
-        // valor nuevo no pasa la revisión (puede ser un campo antiguo que no cambió)
-        const prev = P || ch.store === "movs" || (!borra && !c.valido(ch.store, ch.value, null)) ? c.ultimo(tienda, ch.store, key) : null;
+        // Lo que había: los permisos y la revisión de valores lo comparan con el cambio nuevo
+        const prev = c.ultimo(tienda, ch.store, key);
         if (!borra) ch.value = c.conCosto(P, ch.store, ch.value, prev);
-        if ((!borra && !c.valido(ch.store, ch.value, prev)) || (P && !c.permite(P, ch.store, ch.value || {}, ch.del, prev, { db: tx.db(), tienda: tienda }))) {
+        if ((!borra && !c.valido(ch.store, ch.value, prev)) || !c.permite(P, ch.store, ch.value || {}, ch.del, prev, { db: tx.db(), tienda: tienda })) {
           rechazados.push({ store: ch.store, key: key, hlc: hlc });
           continue;
         }

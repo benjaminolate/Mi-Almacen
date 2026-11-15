@@ -68,7 +68,7 @@ Los datos del servidor quedan en la carpeta `mi-almacen-datos`, **fuera** del pr
 - **Respaldos:** descargar un archivo, restaurarlo (todo o solo lo que falta), copia diaria del servidor y **copia diaria por correo**.
 - **Resumen de ventas** por día, semana, mes y año, con descarga a Excel.
 - **Página de la tienda** con link y QR: foto o logo, botones a reseñas de Google, WhatsApp, cómo llegar y redes, productos y precios, y **reservas por internet** con protección contra abusos.
-- **Cuentas y permisos** (opcionales): dueño, encargado y vendedor, con permisos que elige el dueño.
+- **Cuentas y permisos**: dueño, encargado y vendedor, con permisos que elige el dueño. Toda tienda con servidor tiene dueño desde que se crea.
 - **Extensiones** que cada tienda prende o apaga: stock bajo y lista de compras, vencimientos, proveedores, venta a granel, cierre de caja, ofertas y packs, comprobante, quién atiende, fiados, pan, encargos.
 - **Eliminar productos y clientes** (traído de Inventario VD).
 - **Tutorial** la primera vez y botón **?** en cada pantalla.

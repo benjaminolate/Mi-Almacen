@@ -38,7 +38,7 @@ function showSetup(){
     return `Productos típicos de ${n.nombre.toLowerCase()}<small>${c.n} productos en ${c.sec} sectores. Los que no vendas los apagas uno por uno o por sector. Los precios se completan después o la primera vez que vendes cada uno.</small>`; };
   gate(`${gateHead()}<div class="stack">
     <div class="card stack"><h2>Crea tu tienda</h2>
-      <p class="small muted" style="margin:0">Todo queda guardado en este dispositivo y funciona sin internet. No necesitas crear una cuenta.</p>
+      <p class="small muted" style="margin:0">Todo queda guardado en este dispositivo y funciona sin internet.</p>
       <div class="field"><label for="sn">Nombre de la tienda</label><input class="input" id="sn" placeholder="Ej: Almacén Don José" autocomplete="organization"></div>
       <div class="field"><label for="sp">Tu nombre</label><input class="input" id="sp" placeholder="Ej: Rosa" autocomplete="given-name"></div>
       <div class="field"><label>¿Qué tipo de negocio es?</label>
@@ -51,6 +51,12 @@ function showSetup(){
       <div class="field"><label>¿Qué vas a usar?</label>
         <div style="padding:0 2px" id="sextbox">${extSwitches("data-sext", e => NEGOCIOS[st.tipo].ext.includes(e.id))}</div>
         <p class="small muted" style="margin:0">Lo puedes cambiar cuando quieras en Más &gt; Extensiones.</p></div>
+      <div class="stack" id="sdueno" style="gap:12px" hidden>
+        <p class="small muted" style="margin:0">La tienda también se guarda en el servidor. Crea tu usuario de dueño: con él entras desde otros celulares y eliges qué puede hacer cada persona.</p>
+        <div class="field"><label for="su">Usuario</label><input class="input" id="su" autocapitalize="none" autocomplete="username" placeholder="Ej: rosa"></div>
+        <div class="field"><label for="spw">Contraseña</label><input class="input" id="spw" type="password" autocomplete="new-password" placeholder="Al menos 6 caracteres"></div>
+        <div class="field"><label for="spw2">Repite la contraseña</label><input class="input" id="spw2" type="password" autocomplete="new-password"></div>
+      </div>
       <button class="btn primary block" id="screate">Crear tienda</button>
     </div>
     <button class="btn block" id="sjoin">Unirme a una tienda que ya existe</button>
@@ -66,14 +72,29 @@ function showSetup(){
     if (st.tipo === "otro"){ if (st.inicio !== "vacio") st.auto = true; } else st.auto = false;
     if (ini !== st.inicio){ st.inicio = ini; document.querySelectorAll("[data-ini]").forEach(x => x.setAttribute("aria-pressed", x.dataset.ini === ini)); }
     $("#sextbox").innerHTML = extSwitches("data-sext", e => NEGOCIOS[st.tipo].ext.includes(e.id)); });
+  // Con servidor, el dueño crea su usuario junto con la tienda
+  localServer().then(o => { const d = $("#sdueno"); if (o && d) d.hidden = false; });
   $("#screate").onclick = () => run(async () => {
     const nombre = $("#sn").value.trim(), persona = $("#sp").value.trim();
     if (!nombre){ $("#sn").focus(); return toast("Escribe el nombre de la tienda"); }
-    $("#screate").disabled = true; $("#screate").textContent = "Creando…";
     meta.servidor = await localServer();
-    const exts = Object.fromEntries([...document.querySelectorAll("[data-sext]")].map(i => [i.dataset.sext, i.checked]));
-    await createStore(nombre, persona, st.inicio, exts, st.tipo).finally(() => { const b = $("#screate"); if (b){ b.disabled = false; b.textContent = "Crear tienda"; } });
-    ui.view = "inicio"; await openStore(); toast(`${nombre} está lista`);
+    const id = uid(), usuario = $("#su").value.trim(), pw = $("#spw").value;
+    if (meta.servidor){
+      if (!persona){ $("#sp").focus(); return toast("Escribe tu nombre"); }
+      if (!usuario){ $("#su").focus(); return toast("Elige tu usuario"); }
+      if (pw !== $("#spw2").value) return toast("Las contraseñas no son iguales");
+    }
+    const b = $("#screate"); b.disabled = true; b.textContent = "Creando…";
+    try {
+      let dueno = null;
+      // Si el servidor no responde, la tienda se crea igual en este dispositivo; el usuario se crea después
+      if (meta.servidor) dueno = await crearDueno(meta.servidor, id, persona, usuario, pw).catch(e => { if (e.status) throw e; return null; });
+      const exts = Object.fromEntries([...document.querySelectorAll("[data-sext]")].map(i => [i.dataset.sext, i.checked]));
+      await createStore(nombre, persona, st.inicio, exts, st.tipo, id);
+      if (dueno){ await loadLocal(); await guardarDueno(dueno); }
+      ui.view = "inicio"; await openStore();
+      toast(meta.servidor && !dueno ? `${nombre} está lista en este dispositivo. Cuando haya conexión, crea tu usuario en Más > Cuentas y permisos` : `${nombre} está lista`);
+    } finally { if (b.isConnected){ b.disabled = false; b.textContent = "Crear tienda"; } }
   });
   $("#sdemo").onclick = () => run(async () => { meta.servidor = ""; await createStore("Almacén de ejemplo", "", "ejemplo"); ui.view = "inicio"; await openStore(); });
   $("#sjoin").onclick = () => run(async () => showJoin(await localServer(), ""));

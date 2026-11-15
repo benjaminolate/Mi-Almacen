@@ -57,6 +57,10 @@ async function prenderServidor({ host = "127.0.0.1" } = {}){
 
 const esperar = ms => new Promise(r => setTimeout(r, ms));
 
+// Una IP de este equipo en una red privada, para simular un equipo del wifi de la tienda (o nada)
+const ipPrivada = () => Object.values(os.networkInterfaces()).flat()
+  .find(i => i && i.family === "IPv4" && !i.internal && /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(i.address))?.address;
+
 // Repite fn dentro de la página hasta que devuelva algo verdadero. page.waitForFunction no sirve
 // para esto: toma una promesa como verdadera sin esperarla, y la base de datos local es asíncrona.
 async function esperarQue(page, fn, arg, { ms = 20000, que = "la condición" } = {}){
@@ -85,14 +89,22 @@ async function dispositivo(browser, opciones = {}){
   return { ctx, page };
 }
 
-// Crea una tienda desde la pantalla inicial, con los productos típicos de almacén
-async function crearTienda(page, url, nombre = "Almacén de Prueba"){
+// Crea una tienda desde la pantalla inicial, con los productos típicos de almacén. Si la app la sirve
+// el servidor, también crea el usuario del dueño (rosa / clave123, si no se dice otro).
+async function crearTienda(page, url, nombre = "Almacén de Prueba", { usuario = "rosa", password = "clave123" } = {}){
   await page.goto(url + "/");
   await page.fill("#sn", nombre);
   await page.fill("#sp", "Rosa");
+  const conServidor = await page.evaluate(() => localServer().then(Boolean));
+  if (conServidor){
+    await page.fill("#su", usuario);
+    await page.fill("#spw", password);
+    await page.fill("#spw2", password);
+  }
   await page.click("#screate");
   await page.waitForSelector("#tabs [data-view]");
   await esperarQue(page, async () => !!(await LocalDB.getMeta("tienda")), undefined, { que:"que se cree la tienda" });
+  if (conServidor) await esperarQue(page, () => LocalDB.getMeta("cuenta").then(c => !!c?.token), undefined, { que:"que se cree el usuario del dueño" });
 }
 
 // Abre una pantalla: con su pestaña de abajo, o desde Más
@@ -125,18 +137,8 @@ async function esperarSincronizado(page, ms = 20000){
   await esperarQue(page, async () => Sync.state.status === "ok" && await LocalDB.pendingCount() === 0, undefined, { ms, que:"que diga Sincronizado" });
 }
 
-// El dueño activa las cuentas desde la app (Más > Cuentas y permisos), como lo haría en la tienda
-async function activarCuentas(page, usuario = "rosa", password = "clave123"){
-  await irA(page, "cuentas");
-  await page.fill("#cnom", "Rosa");
-  await page.fill("#cusr", usuario);
-  await page.fill("#cpw", password);
-  await page.fill("#cpw2", password);
-  await page.click("#cact");
-  await esperarQue(page, () => LocalDB.getMeta("cuenta").then(c => !!c?.token), undefined, { que:"que se activen las cuentas" });
-  await esperarSincronizado(page);
-  return (await page.evaluate(() => LocalDB.getMeta("cuenta"))).token;
-}
+// La sesión del dueño en este dispositivo (la crea crearTienda cuando hay servidor)
+const tokenDueno = page => page.evaluate(() => LocalDB.getMeta("cuenta").then(c => c.token));
 
 // Pedido directo al servidor, como lo hace la app (la sesión va tal cual en Authorization)
 async function api(url, ruta, cuerpo, token){
@@ -161,5 +163,5 @@ function captura(page, nombre){
   return page.screenshot({ path:path.join(CAPTURAS, nombre + ".png"), fullPage:true });
 }
 
-module.exports = { RAIZ, servirApp, faltaPocketBase, prenderServidor, esperar, esperarQue, esperarVentas, navegador, dispositivo, crearTienda,
-  irA, venderUno, ventas, pendientes, esperarSincronizado, activarCuentas, api, sello, ultimos, captura };
+module.exports = { RAIZ, servirApp, faltaPocketBase, prenderServidor, ipPrivada, esperar, esperarQue, esperarVentas, navegador, dispositivo, crearTienda,
+  irA, venderUno, ventas, pendientes, esperarSincronizado, tokenDueno, api, sello, ultimos, captura };
