@@ -73,6 +73,7 @@ Dispositivo A ─┐   POST /api/sync: envía su bandeja y recibe lo nuevo     �
 
 - Toda tienda en el servidor tiene dueño: su usuario se crea al crear la tienda (o después en Más > Cuentas y permisos, si se creó sin conexión). El servidor no guarda ni entrega datos de una tienda sin dueño. Cada dispositivo entra con usuario y contraseña (colección `usuarios` de PocketBase, sesión de 30 días que se renueva sola). Una tienda sin servidor (un solo dispositivo) no usa cuentas.
 - `/api/cuentas/activar` crea el dueño de una tienda nueva para el servidor. Si el servidor ya tiene datos de esa tienda (es de antes de las cuentas), solo responde desde el wifi, para que nadie que sepa el código pueda quedarse con ella desde internet.
+- El dueño suma personas con una invitación (`/api/cuentas/invitar`): un link que sirve una sola vez y vence en 48 horas. La persona elige su usuario y contraseña (`/api/cuentas/aceptar`). La colección `invitaciones` guarda solo el sha256 del código.
 - La colección `miembros` dice quién pertenece a qué tienda, con qué rol (dueño, encargado o vendedor) y qué permisos extra tiene un vendedor: precios, costos, inventario, reportes y ajustes.
 - `/api/sync` revisa cada cambio contra los permisos de quien lo manda. Un cambio sin permiso no se guarda y el servidor vuelve a mandar lo que había, para que ese dispositivo quede igual que los demás.
 - Funciona sin internet como antes: la sesión queda guardada en el dispositivo.
@@ -95,7 +96,7 @@ Cómo prenderlo: [servidor/INSTRUCCIONES.md](servidor/INSTRUCCIONES.md).
 | `sync.js` | Envía y recibe cambios con el servidor, y escucha los avisos en tiempo real |
 | `servidor/pb_migrations/` | Crea la tabla `cambios` en PocketBase y activa el respaldo diario |
 | `servidor/pb_hooks/sync.pb.js` | El punto de sincronización `/api/sync` |
-| `servidor/pb_hooks/cuentas.pb.js` | Cuentas, entrar, y quién tiene acceso a cada tienda |
+| `servidor/pb_hooks/cuentas.pb.js` | Cuentas, entrar, invitaciones, y quién tiene acceso a cada tienda |
 | `servidor/pb_hooks/publico.pb.js` | Página pública, reservas y lo que se puede abrir desde internet |
 | `servidor/pb_hooks/respaldo.pb.js` | Respaldo diario por correo de cada tienda |
 | `servidor/iniciar.bat`, `iniciar.sh` | Prenden el servidor con un doble clic |

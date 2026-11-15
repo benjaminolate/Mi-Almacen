@@ -95,7 +95,7 @@ function viewCuentas(){
     </div>
     ${puede("cuentas") ? `<div class="card stack"><div class="spread"><h3>Personas con acceso</h3><button class="btn sm" id="cadd">+ Agregar</button></div>
       <div class="list" id="clist"><div class="empty">Cargando…</div></div>
-      <p class="small muted" style="margin:0">Para que alguien entre desde otro celular: abre la app en ese celular, toca "Entrar con mi usuario" y escribe su usuario y contraseña.</p></div>` : ""}
+      <p class="small muted" style="margin:0">Con <b>+ Agregar</b> creas un link de invitación para esa persona: lo abre en su celular y elige su propio usuario y contraseña.</p></div>` : ""}
   </div>`;
 }
 const PERM_CORTO = { precios:"precios", costos:"costos", inventario:"inventario", reportes:"reportes", config:"ajustes" };
@@ -124,37 +124,61 @@ function bindCuentas(app){
       ${m.activo ? `<span class="pill ${m.rol === "vendedor" ? "none" : "ok"}">${ROLES[m.rol]}</span>` : `<span class="pill bad">Sin acceso</span>`}</button>`).join("");
     l.querySelectorAll("[data-cm]").forEach(b => b.onclick = () => openMiembro(ms.find(m => m.id === b.dataset.cm))); };
   api(`/api/cuentas/miembros?tienda=${meta.tienda.id}`).then(r => { ui.miembros = r.miembros; pintar(r.miembros); }, e => { const l = $("#clist"); if (l) l.innerHTML = `<div class="empty">${esc(e.message)}</div>`; });
-  $("#cadd").onclick = () => openMiembro(null);
+  $("#cadd").onclick = openInvitar;
 }
-// Crear o cambiar a una persona: rol, permisos extra, contraseña y acceso
-function openMiembro(m){
-  const nuevo = !m, rol0 = m?.rol || "vendedor", extra = m?.extra || {};
-  openModal(`<div class="stack">
-    <div class="spread"><h2>${nuevo ? "Agregar persona" : esc(m.nombre)}</h2><button class="btn ghost sm" data-close>Cerrar</button></div>
-    ${nuevo ? `<div class="field"><label for="mnom">Nombre</label><input class="input" id="mnom" placeholder="Ej: Pedro"></div>
-    <div class="field"><label for="musr">Usuario</label><input class="input" id="musr" autocapitalize="none" autocomplete="off" placeholder="Ej: pedro"></div>` : `<p class="small muted" style="margin:0">Usuario: ${esc(m.usuario)}</p>`}
-    <div class="field"><label for="mpw">${nuevo ? "Contraseña" : "Contraseña nueva (opcional)"}</label><input class="input" id="mpw" type="text" autocomplete="off" placeholder="Al menos 6 caracteres"></div>
-    <div class="field"><label>Rol</label><div class="seg" role="group">${Object.entries(ROLES).map(([k, v]) => `<button data-mrol="${esc(k)}" aria-pressed="${k === rol0}">${v}</button>`).join("")}</div></div>
+// Elegir rol y permisos extra (para una invitación o para alguien que ya tiene acceso)
+const rolHtml = (roles, rol0, extra) => `<div class="field"><label>Rol</label><div class="seg" role="group">${roles.map(k => `<button data-mrol="${esc(k)}" aria-pressed="${k === rol0}">${ROLES[k]}</button>`).join("")}</div></div>
     <div class="stack" id="mperm" style="gap:8px" ${rol0 === "vendedor" ? "" : "hidden"}><div class="small" style="font-weight:600">Además de vender, puede:</div>
-      ${Object.entries(PERMISOS).map(([k, v]) => `<label class="row small"><input type="checkbox" data-mp="${esc(k)}" ${extra[k] ? "checked" : ""}> ${esc(v)}</label>`).join("")}</div>
-    <button class="btn primary block" id="msave">${nuevo ? "Crear usuario" : "Guardar cambios"}</button>
-    ${nuevo ? `<p class="small muted" style="margin:0">Después dale a esa persona su usuario y contraseña. Puede cambiar la contraseña desde su celular.</p>`
-      : m.usuarioId === meta.cuenta.usuario.id ? "" : `<button class="btn ghost block" id="macc" style="${m.activo ? "color:var(--bad)" : ""}">${m.activo ? "Quitarle el acceso" : "Devolverle el acceso"}</button>`}
+      ${Object.entries(PERMISOS).map(([k, v]) => `<label class="row small"><input type="checkbox" data-mp="${esc(k)}" ${extra[k] ? "checked" : ""}> ${esc(v)}</label>`).join("")}</div>`;
+function bindRol(rol0){
+  const st = { rol:rol0 };
+  document.querySelectorAll("[data-mrol]").forEach(b => b.onclick = () => { st.rol = b.dataset.mrol; document.querySelectorAll("[data-mrol]").forEach(x => x.setAttribute("aria-pressed", x === b)); $("#mperm").hidden = st.rol !== "vendedor"; });
+  st.permisos = () => Object.fromEntries([...document.querySelectorAll("[data-mp]")].filter(i => i.checked).map(i => [i.dataset.mp, true]));
+  return st;
+}
+// Invitar a alguien: el link sirve una sola vez y vence en 48 horas. Esa persona elige su usuario y contraseña.
+function openInvitar(){
+  openModal(`<div class="stack">
+    <div class="spread"><h2>Invitar a alguien</h2><button class="btn ghost sm" data-close>Cerrar</button></div>
+    <div class="field"><label for="inom">Nombre</label><input class="input" id="inom" placeholder="Ej: Pedro"></div>
+    ${rolHtml(["vendedor", "encargado"], "vendedor", {})}
+    <button class="btn primary block" id="iok">Crear invitación</button>
   </div>`);
-  let rol = rol0;
-  document.querySelectorAll("[data-mrol]").forEach(b => b.onclick = () => { rol = b.dataset.mrol; document.querySelectorAll("[data-mrol]").forEach(x => x.setAttribute("aria-pressed", x === b)); $("#mperm").hidden = rol !== "vendedor"; });
-  const permisos = () => Object.fromEntries([...document.querySelectorAll("[data-mp]")].filter(i => i.checked).map(i => [i.dataset.mp, true]));
+  const st = bindRol("vendedor");
+  $("#iok").onclick = () => run(async () => {
+    const nombre = $("#inom").value.trim(); if (!nombre) return $("#inom").focus();
+    const r = await api("/api/cuentas/invitar", { tienda:meta.tienda.id, nombre, rol:st.rol, permisos:st.permisos() });
+    mostrarInvitacion(nombre, invitacionLink(r.codigo));
+  });
+}
+const invitacionLink = codigo => { const u = new URL(meta.servidor + "/"); u.searchParams.set("invitacion", codigo); return u.href; };
+function mostrarInvitacion(nombre, link){
+  openModal(`<div class="stack">
+    <div class="spread"><h2>Invitación para ${esc(nombre)}</h2><button class="btn ghost sm" data-close>Listo</button></div>
+    <p style="margin:0">Mándale este link. Al abrirlo en su celular elige su usuario y contraseña, y descarga la tienda.</p>
+    <div class="code" id="ilink">${esc(link)}</div>
+    <div class="grid2"><a class="btn" style="text-align:center" href="${esc(waLink("", `Hola ${nombre}, te invito a ${S.ajustes.tienda_nombre || "la tienda"} en Mi Almacén: ${link}`))}" ${WA_TARGET}>Enviar por WhatsApp</a><button class="btn" id="icopy">Copiar link</button></div>
+    <p class="small muted" style="margin:0">Sirve una sola vez y vence en 48 horas. Si se pierde, crea otra.</p>
+  </div>`);
+  $("#icopy").onclick = () => { try { navigator.clipboard.writeText(link).then(() => toast("Link copiado"), () => toast(link)); } catch(e){ toast(link); } };
+}
+// Cambiar a una persona que ya tiene acceso: rol, permisos extra, contraseña y acceso
+function openMiembro(m){
+  openModal(`<div class="stack">
+    <div class="spread"><h2>${esc(m.nombre)}</h2><button class="btn ghost sm" data-close>Cerrar</button></div>
+    <p class="small muted" style="margin:0">Usuario: ${esc(m.usuario)}</p>
+    <div class="field"><label for="mpw">Contraseña nueva (opcional)</label><input class="input" id="mpw" type="text" autocomplete="off" placeholder="Al menos 6 caracteres"></div>
+    ${rolHtml(Object.keys(ROLES), m.rol, m.extra || {})}
+    <button class="btn primary block" id="msave">Guardar cambios</button>
+    ${m.usuarioId === meta.cuenta.usuario.id ? "" : `<button class="btn ghost block" id="macc" style="${m.activo ? "color:var(--bad)" : ""}">${m.activo ? "Quitarle el acceso" : "Devolverle el acceso"}</button>`}
+  </div>`);
+  const st = bindRol(m.rol);
   const listo = msg => { closeModal(); render(); toast(msg); };
   $("#msave").onclick = () => run(async () => {
     const pw = $("#mpw").value;
-    if (nuevo){ const nombre = $("#mnom").value.trim(), usuario = $("#musr").value.trim(); if (!nombre) return $("#mnom").focus(); if (!usuario) return $("#musr").focus();
-      const r = await api("/api/cuentas/miembros", { tienda:meta.tienda.id, nombre, usuario, password:pw, rol, permisos:permisos() });
-      if (!S.personas.some(x => x.id === r.usuarioId)) await act.put("personas", [{ id:r.usuarioId, nombre:r.nombre, activo:true }]);
-      return listo(`${r.nombre} ya puede entrar como ${r.usuario}`); }
-    await api(`/api/cuentas/miembros/${m.id}`, Object.assign({ tienda:meta.tienda.id, rol, permisos:permisos() }, pw ? { password:pw } : {}));
+    await api(`/api/cuentas/miembros/${m.id}`, Object.assign({ tienda:meta.tienda.id, rol:st.rol, permisos:st.permisos() }, pw ? { password:pw } : {}));
     if (m.usuarioId === meta.cuenta.usuario.id) await refrescarCuenta();
     listo("Cambios guardados");
   });
   const ac = $("#macc"); if (ac) ac.onclick = () => run(async () => { await api(`/api/cuentas/miembros/${m.id}`, { tienda:meta.tienda.id, activo:!m.activo }); listo(m.activo ? `${m.nombre} ya no puede entrar` : `${m.nombre} puede volver a entrar`); });
 }
-

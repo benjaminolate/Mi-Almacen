@@ -23,24 +23,29 @@ function permisosValidos(p) {
 function buscarUsuario(usuario) {
   try { return $app.findFirstRecordByData("usuarios", "usuario", usuario); } catch (err) { return null; }
 }
-function crearUsuario(usuario, nombre, password) {
+// Cuánto dura una invitación sin usar: 48 horas
+const VIGENCIA_INVITACION = 48 * 3600e3;
+// app: $app, o la transacción en curso
+function crearUsuario(usuario, nombre, password, app) {
+  app = app || $app;
   const n = String(nombre || "").replace(/\s+/g, " ").trim().slice(0, 60);
   if (!n) throw new BadRequestError("Escribe el nombre.");
-  const u = new Record($app.findCollectionByNameOrId("usuarios"));
+  const u = new Record(app.findCollectionByNameOrId("usuarios"));
   u.set("usuario", usuario);
   u.set("nombre", n);
   u.setPassword(password);
-  $app.save(u);
+  app.save(u);
   return u;
 }
-function crearMiembro(u, tienda, rol, permisos) {
-  const m = new Record($app.findCollectionByNameOrId("miembros"));
+function crearMiembro(u, tienda, rol, permisos, app) {
+  app = app || $app;
+  const m = new Record(app.findCollectionByNameOrId("miembros"));
   m.set("usuario", u.id);
   m.set("tienda", tienda);
   m.set("rol", rol);
   m.set("permisos", permisosValidos(permisos));
   m.set("activo", true);
-  $app.save(m);
+  app.save(m);
   return m;
 }
 // Lo que la app necesita para trabajar: la sesión y sus tiendas con sus permisos
@@ -68,4 +73,4 @@ function soloDueno(e, tienda) {
   return m;
 }
 
-module.exports = { usuarioValido, claveValida, rolValido, permisosValidos, buscarUsuario, crearUsuario, crearMiembro, sesion, miembroJson, soloDueno };
+module.exports = { VIGENCIA_INVITACION, usuarioValido, claveValida, rolValido, permisosValidos, buscarUsuario, crearUsuario, crearMiembro, sesion, miembroJson, soloDueno };

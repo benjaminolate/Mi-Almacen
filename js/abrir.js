@@ -13,13 +13,15 @@ async function localServer(){
 }
 // Invitación: ?unirse=<código de la tienda>&servidor=<dirección>
 const invite = (() => { const q = new URLSearchParams(location.search); return q.get("unirse") ? { tienda:q.get("unirse"), servidor:q.get("servidor") || "" } : null; })();
-const clearInvite = () => { if (invite) history.replaceState(null, "", location.pathname); };
+// Invitación de una persona: ?invitacion=<código de un solo uso>. El servidor es el que sirvió la página.
+const invitacion = new URLSearchParams(location.search).get("invitacion") || "";
+const clearInvite = () => { if (invite || invitacion) history.replaceState(null, "", location.pathname); };
 
 async function openStore(){
   await loadLocal();
   if (!meta.tienda) return showSetup();
   resVistas = null; avisarReservas();
-  if (invite && invite.tienda !== meta.tienda.id) toast("Este dispositivo ya tiene otra tienda. Para unirte, primero borra sus datos en Más > Tienda y datos.");
+  if ((invite && invite.tienda !== meta.tienda.id) || invitacion) toast("Este dispositivo ya tiene otra tienda. Para unirte, primero borra sus datos en Más > Tienda y datos.");
   clearInvite();
   if (!meta.demo && !meta.servidor){ const o = await localServer(); if (o){ meta.servidor = o; await LocalDB.setMeta("servidor", o); } }
   MODE = "local"; $("nav.tabs").hidden = false; history.replaceState({ v:ui.view, n:0 }, ""); render();
@@ -31,6 +33,7 @@ Sync.state.onRechazo = n => toast(`${n === 1 ? "Un cambio no se guardó" : n + "
 Sync.state.onChange = async () => { await loadLocal(); avisarReservas(); if (MODE) softRender(); };
 
 function showSetup(){
+  if (invitacion) return showAceptar();
   if (invite) return showJoin(invite.servidor, invite.tienda);
   S = null; applyTheme();
   const st = { inicio:"catalogo", tipo:"almacen" };
@@ -142,3 +145,33 @@ function showJoin(servidor, tienda, conCuenta){
   });
 }
 
+
+// La persona invitada elige su usuario y contraseña, y descarga la tienda
+function showAceptar(){
+  gate(`${gateHead()}<div class="stack">
+    <div class="card stack"><h2>Te invitaron a una tienda</h2>
+      <p class="small muted" style="margin:0">Elige tu usuario y una contraseña. Con ellos entras a la tienda desde este celular.</p>
+      <div class="field"><label for="auser">Usuario</label><input class="input" id="auser" autocapitalize="none" autocomplete="username" placeholder="Ej: pedro"></div>
+      <div class="field"><label for="apass">Contraseña</label><input class="input" id="apass" type="password" autocomplete="new-password" placeholder="Al menos 6 caracteres"></div>
+      <div class="field"><label for="apass2">Repite la contraseña</label><input class="input" id="apass2" type="password" autocomplete="new-password"></div>
+      <button class="btn primary block" id="ago">Entrar a la tienda</button>
+      <p class="small muted" style="margin:0">Si ya tienes usuario en otra tienda, escribe ese mismo usuario y su contraseña.</p>
+    </div>
+    <button class="btn ghost block" id="aback">Volver</button>
+  </div>`);
+  $("#aback").onclick = () => { clearInvite(); location.reload(); };
+  $("#ago").onclick = () => run(async () => {
+    const usuario = $("#auser").value.trim(), pw = $("#apass").value;
+    if (!usuario) return $("#auser").focus();
+    if (pw !== $("#apass2").value) return toast("Las contraseñas no son iguales");
+    const b = $("#ago"); b.disabled = true; b.textContent = "Descargando datos…";
+    try {
+      const s = await cuentaApi(location.origin, "/api/cuentas/aceptar", { codigo:invitacion, usuario, password:pw });
+      // El link ya se usó: si la descarga falla, se entra después con "Entrar con mi usuario"
+      clearInvite();
+      try { await joinStore(location.origin, s.tienda, s); }
+      catch(e){ await LocalDB.wipe().catch(() => {}); Sync.stop(); throw e; }
+    } finally { if (b.isConnected){ b.disabled = false; b.textContent = "Entrar a la tienda"; } }
+    ui.view = "inicio"; await openStore(); toast(`Listo: ${S.ajustes.tienda_nombre || "la tienda"} está en este dispositivo`);
+  });
+}

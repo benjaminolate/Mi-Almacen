@@ -24,7 +24,7 @@ en **español simple**.
 | `sw.js` | Service worker. `VERSION` (la versión de la copia guardada) y la lista `FILES` de lo que se guarda para abrir sin internet. |
 | `servidor/pb_hooks/*.pb.js` | Rutas del servidor: `sync`, `cuentas`, `publico` (incluye el bloqueo de lo que llega por internet), `respaldo` (correo diario), `archivos` (encabezados de seguridad y la lista de archivos de la app que el servidor entrega). |
 | `servidor/pb_hooks/comun.js`, `cuentas.js`, `respaldo.js` | Funciones compartidas. Las reglas de permisos (`permite`) y de valores (`valido`) están en `comun.js`. |
-| `servidor/pb_migrations/` | Tablas `cambios`, `vitrinas`, `usuarios`, `miembros` y el respaldo automático. |
+| `servidor/pb_migrations/` | Tablas `cambios`, `vitrinas`, `usuarios`, `miembros`, `invitaciones` y el respaldo automático. |
 | `servidor/iniciar.bat`, `iniciar.sh` | Prenden PocketBase con datos en `../../mi-almacen-datos` (fuera del repo) y sirven la carpeta del repo como sitio. |
 
 ## Cómo funcionan los datos (no romper)
