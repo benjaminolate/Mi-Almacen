@@ -30,8 +30,8 @@ Los datos quedan en una carpeta **`mi-almacen-datos`**, al lado de la carpeta de
 
 Abre **http://localhost:8090** en el navegador.
 
-- Si ya tenías una tienda creada en esta dirección, se conecta sola al servidor.
-- Si no, crea la tienda. Arriba a la derecha tiene que decir **"Sincronizado"**.
+- Si no, crea la tienda. Como hay servidor, también te pide crear tu **usuario de dueño** (usuario y contraseña de al menos 6 caracteres). Arriba a la derecha tiene que decir **"Sincronizado"**.
+- Si ya tenías una tienda creada en esta dirección, se conecta sola al servidor. Si es de antes de las cuentas, el servidor no la guarda hasta que crees tu usuario de dueño en **Más → Cuentas y permisos**. Para eso abre la app con la IP del computador (`http://IP-DE-ESTE-COMPUTADOR:8090`, paso 5), no con `localhost`: una tienda que ya tiene datos solo se puede reclamar desde el wifi.
 
 > La app de GitHub Pages (`benjaminolate.github.io/Mi-Almacen`) es otra dirección y tiene sus propios datos. Solo puede conectarse al servidor cuando este tiene dirección con candado (https): ver el paso 7.
 
@@ -42,7 +42,7 @@ Abre **http://localhost:8090** en el navegador.
    - Mac: Preferencias del Sistema → Red.
 2. En el computador, en la app: **Más → Tienda y datos → Sincronización**. En **Dirección del servidor** cambia `localhost` por la IP, por ejemplo `http://192.168.1.20:8090`, y toca **Guardar**. Así el link de invitación sirve para los celulares.
 3. Toca **Enviar por WhatsApp** (o **Copiar link**) y ábrelo en el celular, conectado al **mismo wifi**.
-4. En el celular toca **Unirme y descargar los datos**. En unos segundos tiene todos los productos.
+4. En el celular toca **Unirme y descargar los datos** y entra con tu usuario o con el de esa persona (paso 9). En unos segundos tiene todos los productos.
 
 Desde ahí, lo que se venda en uno aparece en el otro al instante.
 
@@ -102,7 +102,7 @@ Para apagarlo: `tailscale funnel --bg 8090 off`.
 
 ### Qué queda abierto a internet
 
-Solo la app, la página de la tienda, las reservas y la sincronización. El panel de administración (`/_/`) y el resto del servidor responden únicamente en el wifi de la tienda. Los datos de una tienda solo los puede leer quien tenga su código (el link de invitación), así que no lo compartas fuera del equipo.
+Solo la app, la página de la tienda, las reservas y la sincronización. El panel de administración (`/_/`) y el resto del servidor responden únicamente en el wifi de la tienda. Los datos de una tienda solo los puede leer o cambiar alguien con usuario de esa tienda: el código de la tienda (el link de invitación) solo no basta.
 
 ## 8. La página de la tienda
 
@@ -119,9 +119,9 @@ La página muestra lo que la app publicó la última vez que estuvo conectada al
 
 ## 9. Cuentas y permisos
 
-Sin cuentas, cualquiera con el link de invitación entra a la tienda y puede hacer de todo. Con cuentas, cada persona entra con su usuario y contraseña.
+Toda tienda que se guarda en el servidor tiene un dueño con usuario y contraseña, y cada persona entra con el suyo. El servidor no guarda una tienda sin dueño, y saber el código de la tienda no basta para ver ni cambiar nada.
 
-1. En la app del dueño: **Más → Cuentas y permisos**. Escribe tu nombre, un usuario y una contraseña (al menos 6 caracteres) y toca **Activar las cuentas**. Necesita conexión con el servidor.
+1. El usuario del dueño se crea al crear la tienda. Si la tienda se creó sin conexión o antes de esto, se crea en **Más → Cuentas y permisos**: escribe tu nombre, un usuario y una contraseña (al menos 6 caracteres) y toca **Activar las cuentas**. Necesita conexión con el servidor. Una tienda que el servidor ya tiene guardada sin dueño solo se puede activar desde el wifi (abriendo la app con la IP del computador).
 2. Toca **+ Agregar** por cada persona que atiende: nombre, usuario, contraseña y rol.
    - **Vendedor:** vende, anota fiados, reservas y encargos, y cierra la caja. Puedes marcarle permisos extra: cambiar precios, ver costos, contar y recibir, ver reportes o cambiar ajustes.
    - **Encargado:** todo menos crear cuentas.

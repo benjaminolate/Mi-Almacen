@@ -25,8 +25,9 @@ routerAdd("POST", "/api/publico/publicar", (e) => {
   if (!c.UUID.test(tienda) || !c.PID.test(pid)) throw new BadRequestError("Datos no válidos");
   if (JSON.stringify(body.data || {}).length > 450000) throw new BadRequestError("La vitrina es demasiado grande");
   if ($app.countRecords("cambios", $dbx.hashExp({ tienda: tienda })) === 0) throw new BadRequestError("El servidor no tiene datos de esa tienda");
-  // Con cuentas activas, solo publica alguien de la tienda
-  if (c.tieneMiembros(tienda) && !c.miembroDe(e, tienda)) throw new UnauthorizedError("Entra con tu usuario.");
+  // Solo publica alguien de la tienda
+  const no = c.sinAcceso(e, tienda);
+  if (no) throw new UnauthorizedError(no.message);
 
   let r = null;
   try { r = $app.findFirstRecordByData("vitrinas", "pid", pid); } catch (err) { r = null; }

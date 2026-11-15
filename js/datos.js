@@ -69,7 +69,7 @@ function syncCard(){
       <p class="small muted" style="margin:0">Abre este link en el otro dispositivo ${/^https:/.test(meta.servidor) ? "" : "(tiene que estar en el mismo wifi mientras el servidor esté en tu computador)"}:</p>
       <div class="code">${esc(inviteLink())}</div></div>
     <div class="grid2"><a class="btn" style="text-align:center" href="${esc(waLink("", "Únete a " + (S.ajustes.tienda_nombre || "la tienda") + " en Mi Almacén: " + inviteLink()))}" ${WA_TARGET}>Enviar por WhatsApp</a><button class="btn" id="scopy">Copiar link</button></div>` : ""}
-    <p class="small muted" style="margin:0">Código de la tienda: <span class="code">${esc(meta.tienda?.id || "")}</span>. ${cuentasOn() ? "Además del link, cada persona necesita su usuario y contraseña." : "No lo compartas con personas ajenas: es la llave para entrar a los datos. Para más seguridad, activa las cuentas en Más &gt; Cuentas y permisos."}</p>
+    <p class="small muted" style="margin:0">Código de la tienda: <span class="code">${esc(meta.tienda?.id || "")}</span>. ${cuentasOn() ? "Además del link, cada persona necesita su usuario y contraseña." : "El servidor todavía no guarda esta tienda: crea tu usuario de dueño en Más &gt; Cuentas y permisos."}</p>
   </div>`;
 }
 

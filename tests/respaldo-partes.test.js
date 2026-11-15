@@ -70,7 +70,7 @@ test("el servidor carga el respaldo por correo y explica que falta configurar el
     await h.crearTienda(page, pb.url);
     await h.esperarSincronizado(page);
     const tienda = (await page.evaluate(() => LocalDB.getMeta("tienda"))).id;
-    const r = await h.api(pb.url, "/api/respaldo/correo", { tienda });
+    const r = await h.api(pb.url, "/api/respaldo/correo", { tienda }, await h.tokenDueno(page));
     assert.equal(r.status, 400);
     assert.match(r.json.message, /configurado el correo/);
   } finally { await browser.close(); await pb.apagar(); }

@@ -102,6 +102,13 @@ function miembroDe(e, tienda) {
     return m;
   } catch (err) { return null; }
 }
+// Toda tienda en el servidor tiene un dueño con usuario: sin la sesión de alguien de la tienda no se lee
+// ni se guarda nada. Devuelve null si puede pasar, o el motivo { code, message } si no.
+function sinAcceso(e, tienda) {
+  if (!tieneMiembros(tienda)) return { code: "sin-dueno", message: "Esta tienda todavía no tiene usuario de dueño. En el celular del dueño, entra a Más > Cuentas y permisos y créalo." };
+  if (!miembroDe(e, tienda)) return { code: "cuenta", message: e.auth ? "Tu usuario no tiene acceso a esta tienda." : "Esta tienda usa cuentas: entra con tu usuario." };
+  return null;
+}
 function permisosMiembro(m) { return permisosDe(m.getString("rol"), JSON.parse(m.getString("permisos") || "{}")); }
 
 // Último valor que tiene el servidor de un registro: { value, hlc }, { del: true, hlc } o null
@@ -170,12 +177,12 @@ function permite(P, store, value, del, prev, ctx) {
 // tenía (conCosto) para que no se pierda. Pueden anotar un costo (al recibir), pero no leerlo.
 const CON_COSTO = ["products", "movs"];
 function conCosto(P, store, value, prev) {
-  if (!P || P.costos || store !== "products" || !value || value.cost !== undefined) return value;
+  if (P.costos || store !== "products" || !value || value.cost !== undefined) return value;
   if (!prev || !prev.value || prev.value.cost === undefined) return value;
   return Object.assign({}, value, { cost: prev.value.cost });
 }
 function sinCostos(P, cambio) {
-  if (P && !P.costos && cambio.value && CON_COSTO.indexOf(cambio.store) >= 0) delete cambio.value.cost;
+  if (!P.costos && cambio.value && CON_COSTO.indexOf(cambio.store) >= 0) delete cambio.value.cost;
   return cambio;
 }
 
@@ -215,5 +222,5 @@ function valido(store, value, prev) {
   return true;
 }
 
-module.exports = { UUID, PID, ID, maxSeq, avisar, guardarCambio, desdeInternet, ipCliente, limite,
+module.exports = { UUID, PID, ID, maxSeq, avisar, guardarCambio, desdeInternet, ipCliente, limite, sinAcceso,
   PERMISOS, permisosDe, tieneMiembros, miembroDe, permisosMiembro, ultimo, saldoCliente, permite, valido, conCosto, sinCostos };

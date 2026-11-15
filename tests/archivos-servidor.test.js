@@ -25,7 +25,9 @@ test("el servidor solo entrega los archivos de la app", { skip:falta || false },
       assert.equal(await estado(pb.url, ruta), 200, ruta);
     for (const ruta of ["/respaldo-prueba-servidor.json", "/.git/HEAD", "/.gitignore", "/CLAUDE.md", "/docs/ESTADO-Y-PLAN.md",
       "/servidor/INSTRUCCIONES.md", "/servidor/pb_hooks/comun.js", "/tests/package.json", "/tests/", "/docs/", "/no-existe"])
-      assert.equal(await estado(pb.url, ruta), 404, ruta);
+      // 404 lo da la lista de archivos de la app; 403, el bloqueo de lo que llega por internet (las pruebas
+      // entran por 127.0.0.1, que cuenta como internet). PocketBase no fija cuál de los dos revisa primero.
+      assert.ok([403, 404].includes(await estado(pb.url, ruta)), ruta);
     // La app abre igual desde el servidor y crea una tienda
     const { page } = await h.dispositivo(browser);
     await h.crearTienda(page, pb.url);

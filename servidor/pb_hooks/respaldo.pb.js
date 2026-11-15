@@ -26,11 +26,9 @@ routerAdd("POST", "/api/respaldo/correo", (e) => {
   const tienda = String((e.requestInfo().body || {}).tienda || "");
   if (!c.UUID.test(tienda)) throw new BadRequestError("Código de tienda no válido");
   if ($app.countRecords("cambios", $dbx.hashExp({ tienda: tienda })) === 0) throw new BadRequestError("El servidor todavía no tiene los datos de esta tienda. Espera a que diga Sincronizado.");
-  if (c.tieneMiembros(tienda)) {
-    const m = c.miembroDe(e, tienda);
-    if (!m) throw new UnauthorizedError("Entra con tu usuario.");
-    if (!c.permisosMiembro(m).config) throw new ForbiddenError("Tu usuario no puede cambiar los ajustes de la tienda.");
-  }
+  const no = c.sinAcceso(e, tienda);
+  if (no) throw new UnauthorizedError(no.message);
+  if (!c.permisosMiembro(c.miembroDe(e, tienda)).config) throw new ForbiddenError("Tu usuario no puede cambiar los ajustes de la tienda.");
   if (!c.limite("respaldo:" + tienda, 5, 3600e3)) throw new TooManyRequestsError("Ya se mandaron varios respaldos en la última hora. Espera un rato.");
   if (!r.hayCorreo()) throw new BadRequestError("El servidor todavía no tiene configurado el correo. Mira la sección \"Respaldo por correo\" de servidor/INSTRUCCIONES.md.");
   const para = r.correoDe(tienda);

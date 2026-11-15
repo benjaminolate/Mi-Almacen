@@ -4,7 +4,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const http = require("node:http");
-const os = require("node:os");
 const h = require("./ayuda");
 
 const falta = h.faltaPocketBase();
@@ -16,10 +15,6 @@ const pedir = (url, ruta, encabezados = {}) => new Promise((ok, mal) => {
   r.on("error", mal);
   r.end();
 });
-
-// Una IP de este equipo en una red privada (como la del wifi de la tienda)
-const ipPrivada = () => Object.values(os.networkInterfaces()).flat()
-  .find(i => i && i.family === "IPv4" && !i.internal && /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(i.address))?.address;
 
 const CERRADAS = ["/_/", "/api/collections/cambios/records", "/api/collections/_superusers/auth-with-password", "/api/backups"];
 
@@ -39,7 +34,7 @@ test("desde internet el panel y la API interna quedan cerrados, aunque digan ser
 });
 
 test("desde el wifi el panel abre, pero no si el pedido viene reenviado desde internet", { skip:falta || false }, async t => {
-  const ip = ipPrivada();
+  const ip = h.ipPrivada();
   if (!ip) return t.skip("este equipo no tiene una IP de red privada para simular el wifi");
   const pb = await h.prenderServidor({ host:ip });
   try {

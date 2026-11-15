@@ -14,9 +14,13 @@ test("dos dispositivos se mantienen al día", { skip:falta || false }, async () 
     await h.venderUno(a.page, "arroz", 1500);
     await h.esperarSincronizado(a.page);
 
-    // B se une con el link de invitación
+    // B se une con el link de invitación: el código solo no basta, también pide usuario
     const tienda = (await a.page.evaluate(() => LocalDB.getMeta("tienda"))).id;
     await b.page.goto(`${pb.url}/?unirse=${tienda}&servidor=${encodeURIComponent(pb.url)}`);
+    await b.page.click("#jgo");
+    await b.page.waitForSelector("#juser:visible");
+    await b.page.fill("#juser", "rosa");
+    await b.page.fill("#jpass", "clave123");
     await b.page.click("#jgo");
     await b.page.waitForSelector("#tabs [data-view]");
     assert.match(await b.page.textContent("header"), /Almacén Sincronizado/);

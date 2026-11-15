@@ -16,17 +16,16 @@ test("un vendedor no puede hacer lo que no le toca", { skip:falta || false }, as
     await h.esperarSincronizado(page);
     const tienda = (await page.evaluate(() => LocalDB.getMeta("tienda"))).id;
 
-    const dueno = await h.api(pb.url, "/api/cuentas/activar", { tienda, usuario:"rosa", nombre:"Rosa", password:"clave123" });
-    assert.equal(dueno.status, 200, JSON.stringify(dueno.json));
-    const alta = await h.api(pb.url, "/api/cuentas/miembros", { tienda, usuario:"vale", nombre:"Vale", password:"clave456", rol:"vendedor", permisos:{} }, dueno.json.token);
+    const D = await h.tokenDueno(page);
+    const alta = await h.api(pb.url, "/api/cuentas/miembros", { tienda, usuario:"vale", nombre:"Vale", password:"clave456", rol:"vendedor", permisos:{} }, D);
     assert.equal(alta.status, 200, JSON.stringify(alta.json));
     const vende = await h.api(pb.url, "/api/cuentas/entrar", { usuario:"vale", password:"clave456" });
     assert.equal(vende.status, 200);
     const permisos = vende.json.tiendas.find(t => t.tienda === tienda).permisos;
     assert.deepEqual(permisos, { cuentas:false, precios:false, costos:false, inventario:false, reportes:false, config:false });
-    const V = vende.json.token, D = dueno.json.token;
+    const V = vende.json.token;
 
-    // Con cuentas activas, sin usuario no se sincroniza
+    // Sin usuario no se sincroniza
     const anon = await h.api(pb.url, "/api/sync", { tienda, desde:0, cambios:[] });
     assert.equal(anon.status, 401);
     assert.equal(anon.json.code, "cuenta");

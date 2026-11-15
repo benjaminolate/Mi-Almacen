@@ -70,7 +70,8 @@ test("el servidor rechaza ids con caracteres de código y no guarda nada de ello
     await h.crearTienda(page, pb.url);
     await h.esperarSincronizado(page);
     const tienda = (await page.evaluate(() => LocalDB.getMeta("tienda"))).id;
-    const envia = cambios => h.api(pb.url, "/api/sync", { tienda, device:"prueba", desde:0, cambios });
+    const D = await h.tokenDueno(page);
+    const envia = cambios => h.api(pb.url, "/api/sync", { tienda, device:"prueba", desde:0, cambios }, D);
 
     const malos = registrosMaliciosos().map(c => Object.assign(c, { hlc:h.sello("otro") }));
     malos.push({ hlc:h.sello("otro"), store:"products", del:MALO });

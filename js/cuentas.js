@@ -34,6 +34,14 @@ async function guardarCuenta(c){
   // Sin el permiso, el servidor manda todo sin costos: quien recién lo tiene vuelve a pedir todo
   if (!veiaCostos && miTienda()?.permisos?.costos) await Sync.pedirTodo();
 }
+// El dueño crea su usuario en el servidor: al crear la tienda, o después en Cuentas y permisos.
+// Va antes de sincronizar, porque el servidor no guarda una tienda sin dueño.
+const crearDueno = (base, tienda, nombre, usuario, password) => cuentaApi(base, "/api/cuentas/activar", { tienda, nombre, usuario, password });
+async function guardarDueno(s){
+  await guardarCuenta(s);
+  await act.put("personas", [{ id:s.usuario.id, nombre:s.usuario.nombre, activo:true }]);
+  await act.setting("cuentas", true);
+}
 // Renueva la sesión y los permisos cuando hay conexión
 async function refrescarCuenta(){
   if (!meta.cuenta?.token || !meta.servidor) return;
@@ -67,9 +75,9 @@ function viewCuentas(){
   if (!cuentasOn()) return `${header("Cuentas y permisos", "Usuario y contraseña para cada persona")}
   <div class="stack">
     <div class="card stack">
-      <p style="margin:0">Hoy cualquiera con el link de invitación entra a la tienda y puede hacer de todo. Con las cuentas, cada persona entra con su usuario y contraseña, y tú eliges qué puede hacer.</p>
+      <p style="margin:0">Para que el servidor guarde la tienda, crea tu usuario de dueño. Después cada persona entra con su usuario y contraseña, y tú eliges qué puede hacer.</p>
       <ul class="small" style="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px"><li><b>Vendedor:</b> vende, anota fiados, reservas y encargos, y cierra la caja. Puedes darle permisos extra, como contar o recibir.</li><li><b>Encargado:</b> todo, menos crear cuentas.</li><li><b>Dueño:</b> todo, y administra las cuentas.</li></ul>
-      <p class="small muted" style="margin:0">Al activarlas, todos los dispositivos de la tienda van a pedir usuario y contraseña. Se necesita conexión con el servidor.</p>
+      <p class="small muted" style="margin:0">Mientras no lo crees, la tienda queda solo en este dispositivo. Al activarlas, todos los dispositivos de la tienda van a pedir usuario y contraseña. Se necesita conexión con el servidor.</p>
     </div>
     <div class="card stack"><h3>Tu cuenta de dueño</h3>
       <div class="field"><label for="cnom">Tu nombre</label><input class="input" id="cnom" value="${esc(meta.tienda?.persona || "")}" autocomplete="name"></div>
@@ -98,11 +106,8 @@ function bindCuentas(app){
       const nombre = $("#cnom").value.trim(), usuario = $("#cusr").value.trim(), pw = $("#cpw").value;
       if (!nombre) return $("#cnom").focus(); if (!usuario) return $("#cusr").focus();
       if (pw !== $("#cpw2").value) return toast("Las contraseñas no son iguales");
-      await Sync.syncNow();
-      const s = await api("/api/cuentas/activar", { tienda:meta.tienda.id, nombre, usuario, password:pw });
-      await guardarCuenta(s);
-      await act.put("personas", [{ id:s.usuario.id, nombre:s.usuario.nombre, activo:true }]);
-      await act.setting("cuentas", true);
+      await guardarDueno(await crearDueno(meta.servidor, meta.tienda.id, nombre, usuario, pw));
+      Sync.syncNow();
       render(); toast("Cuentas activadas. Ahora agrega a quienes atienden.");
     });
     return;
