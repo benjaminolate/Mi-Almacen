@@ -52,7 +52,7 @@ PocketBase es un programa gratis de un solo archivo. Se prende con doble clic en
 | `pb_hooks/publico.pb.js` | Página pública, reservas por internet y qué se puede abrir desde afuera. |
 | `pb_hooks/respaldo.pb.js`, `respaldo.js` | Respaldo diario por correo de cada tienda. |
 | `pb_hooks/comun.js` | Reglas compartidas: permisos, validaciones y bloqueo del panel desde internet. |
-| `pb_migrations/` | Crean las tablas: `cambios`, respaldos automáticos, `vitrinas` y cuentas (`usuarios`, `miembros`). |
+| `pb_migrations/` | Crean las tablas: `cambios`, respaldos automáticos, `vitrinas` y cuentas (`usuarios`, `miembros`, `invitaciones`). |
 
 Los datos del servidor quedan en la carpeta `mi-almacen-datos`, **fuera** del proyecto, para que nunca se suban a GitHub. Se guarda una copia automática cada día a las 3 de la mañana (las últimas 14).
 

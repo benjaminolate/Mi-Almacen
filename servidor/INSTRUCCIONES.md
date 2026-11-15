@@ -42,7 +42,7 @@ Abre **http://localhost:8090** en el navegador.
    - Mac: Preferencias del Sistema → Red.
 2. En el computador, en la app: **Más → Tienda y datos → Sincronización**. En **Dirección del servidor** cambia `localhost` por la IP, por ejemplo `http://192.168.1.20:8090`, y toca **Guardar**. Así el link de invitación sirve para los celulares.
 3. Toca **Enviar por WhatsApp** (o **Copiar link**) y ábrelo en el celular, conectado al **mismo wifi**.
-4. En el celular toca **Unirme y descargar los datos** y entra con tu usuario o con el de esa persona (paso 9). En unos segundos tiene todos los productos.
+4. En el celular toca **Unirme y descargar los datos** y entra con tu usuario. En unos segundos tiene todos los productos. Para sumar a otra persona, mejor mándale una invitación (paso 9): así elige su propio usuario.
 
 Desde ahí, lo que se venda en uno aparece en el otro al instante.
 
@@ -122,11 +122,11 @@ La página muestra lo que la app publicó la última vez que estuvo conectada al
 Toda tienda que se guarda en el servidor tiene un dueño con usuario y contraseña, y cada persona entra con el suyo. El servidor no guarda una tienda sin dueño, y saber el código de la tienda no basta para ver ni cambiar nada.
 
 1. El usuario del dueño se crea al crear la tienda. Si la tienda se creó sin conexión o antes de esto, se crea en **Más → Cuentas y permisos**: escribe tu nombre, un usuario y una contraseña (al menos 6 caracteres) y toca **Activar las cuentas**. Necesita conexión con el servidor. Una tienda que el servidor ya tiene guardada sin dueño solo se puede activar desde el wifi (abriendo la app con la IP del computador).
-2. Toca **+ Agregar** por cada persona que atiende: nombre, usuario, contraseña y rol.
+2. Toca **+ Agregar** por cada persona que atiende: escribe su nombre, elige su rol y toca **Crear invitación**. Mándale el link por WhatsApp. Al abrirlo en su celular, esa persona elige su propio usuario y contraseña, y descarga la tienda. El link sirve **una sola vez** y **vence en 48 horas**; si se pierde, crea otro.
    - **Vendedor:** vende, anota fiados, reservas y encargos, y cierra la caja. Puedes marcarle permisos extra: cambiar precios, ver costos, contar y recibir, ver reportes o cambiar ajustes.
    - **Encargado:** todo menos crear cuentas.
    - **Dueño:** todo, y administra las cuentas.
-3. Los dispositivos que ya estaban unidos piden usuario y contraseña en la próxima sincronización. Un celular nuevo abre la app, toca **Entrar con mi usuario**, escribe la dirección del servidor, su usuario y contraseña, y descarga la tienda.
+3. Para entrar después en otro celular (o si se borró la app), se toca **Entrar con mi usuario** y se escribe la dirección del servidor, el usuario y la contraseña.
 4. Si alguien deja de trabajar contigo, entra a su nombre y toca **Quitarle el acceso**: su celular deja de recibir y enviar datos.
 
 Si olvidas tu contraseña de dueño, entra al panel `http://IP-DE-ESTE-COMPUTADOR:8090/_/` desde el computador del servidor → tabla **usuarios** → tu usuario → cambia la contraseña.
