@@ -20,7 +20,9 @@ En [github.com/benjaminolate/Mi-Almacen](https://github.com/benjaminolate/Mi-Alm
   - La primera vez, Windows pregunta si permites que PocketBase use la red: marca **Redes privadas** y acepta. Sin eso, los celulares no lo van a encontrar.
 - **Mac o Linux:** en una terminal, `servidor/iniciar.sh`.
 
-La primera vez PocketBase puede abrir el navegador para crear una cuenta de **administrador** del servidor. Es opcional: la app no la necesita. Si la creas, desde `http://localhost:8090/_/` puedes ver los datos guardados en la tabla `cambios`.
+La primera vez PocketBase puede abrir el navegador para crear una cuenta de **administrador** del servidor. Es opcional: la app no la necesita. Si la creas, desde el **panel de administración** puedes ver los datos guardados en la tabla `cambios`.
+
+**El panel de administración se abre con la IP del computador, no con `localhost`:** `http://IP-DE-ESTE-COMPUTADOR:8090/_/` (cómo saber la IP: paso 5). Por seguridad, el servidor solo abre el panel a equipos del wifi, y lo que llega por `localhost` cuenta como internet, porque los túneles y el VPS entregan todo por ahí. Si el navegador se abre solo en `http://localhost:8090/_/…` y dice que solo se puede abrir desde el wifi, cambia `localhost` por la IP y deja el resto igual.
 
 Los datos quedan en una carpeta **`mi-almacen-datos`**, al lado de la carpeta del proyecto (fuera de ella, para que nunca se suban a GitHub).
 
@@ -55,7 +57,7 @@ Desde ahí, lo que se venda en uno aparece en el otro al instante.
 
 El servidor guarda solo una copia de todo **cada día a las 3 de la mañana** (si el computador está prendido) y mantiene las últimas 14. Quedan en `mi-almacen-datos/backups`.
 
-Para volver a una copia: entra a `http://localhost:8090/_/` con la cuenta de administrador → **Settings → Backups** → elige la fecha → **Restore**. Ahí mismo puedes hacer una copia a mano con **Initialize new backup**.
+Para volver a una copia: entra a `http://IP-DE-ESTE-COMPUTADOR:8090/_/` con la cuenta de administrador → **Settings → Backups** → elige la fecha → **Restore**. Ahí mismo puedes hacer una copia a mano con **Initialize new backup**.
 
 Aparte, desde la app (**Más → Tienda y datos**) puedes descargar un respaldo a tu teléfono. Al restaurarlo puedes elegir **Agregar lo que falta**, que no borra nada de lo que ya hay.
 
@@ -64,7 +66,7 @@ Aparte, desde la app (**Más → Tienda y datos**) puedes descargar un respaldo 
 Las copias de arriba quedan en el mismo computador: si se echa a perder el disco, se pierden junto con todo lo demás. Por eso conviene que además llegue cada noche un correo con el respaldo de la tienda (a las 01:30 en verano y a las 00:30 en invierno, hora de Chile). Se configura una sola vez, en unos 10 minutos:
 
 1. **Prepara un Gmail.** Conviene uno solo para esto (por ejemplo `mitienda.respaldos@gmail.com`). En [myaccount.google.com/security](https://myaccount.google.com/security) activa la **Verificación en 2 pasos**. Después, en [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords), crea una **contraseña de aplicación** llamada "Mi Almacén" y copia las 16 letras. No es la contraseña normal del Gmail.
-2. **Configura el correo en el servidor.** Entra a `http://localhost:8090/_/` → **Settings → Mail settings**:
+2. **Configura el correo en el servidor.** Entra a `http://IP-DE-ESTE-COMPUTADOR:8090/_/` → **Settings → Mail settings**:
    - **Sender name**: el nombre de la tienda. **Sender address**: el Gmail del paso 1.
    - Activa **Use SMTP mail server**. **SMTP server host**: `smtp.gmail.com`, **Port**: `587`, **Username**: el Gmail, **Password**: las 16 letras.
    - Guarda con **Save changes**. Con **Send test email** puedes comprobar que funciona.
@@ -127,7 +129,7 @@ Sin cuentas, cualquiera con el link de invitación entra a la tienda y puede hac
 3. Los dispositivos que ya estaban unidos piden usuario y contraseña en la próxima sincronización. Un celular nuevo abre la app, toca **Entrar con mi usuario**, escribe la dirección del servidor, su usuario y contraseña, y descarga la tienda.
 4. Si alguien deja de trabajar contigo, entra a su nombre y toca **Quitarle el acceso**: su celular deja de recibir y enviar datos.
 
-Si olvidas tu contraseña de dueño, entra al panel `http://localhost:8090/_/` desde el computador del servidor → tabla **usuarios** → tu usuario → cambia la contraseña.
+Si olvidas tu contraseña de dueño, entra al panel `http://IP-DE-ESTE-COMPUTADOR:8090/_/` desde el computador del servidor → tabla **usuarios** → tu usuario → cambia la contraseña.
 
 ## Si algo falla
 

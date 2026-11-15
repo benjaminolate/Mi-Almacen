@@ -34,17 +34,18 @@ function faltaPocketBase(){
   return msg;
 }
 
-async function prenderServidor(){
+// host: la IP donde escucha. Por defecto 127.0.0.1, que el servidor trata como internet (así llegan los túneles).
+async function prenderServidor({ host = "127.0.0.1" } = {}){
   const bin = process.env.PB_BIN;
   const datos = fs.mkdtempSync(path.join(os.tmpdir(), "mi-almacen-datos-"));
   const dir = ["--dir", datos];
   // Un administrador creado de antemano evita que PocketBase quede esperando la instalación
   execFileSync(bin, ["superuser", "upsert", "admin@prueba.local", "clave-de-prueba-123", ...dir, "--migrationsDir", path.join(RAIZ, "servidor/pb_migrations")], { stdio:"pipe" });
   const puerto = 18000 + Math.floor(Math.random() * 2000);
-  const proc = spawn(bin, ["serve", `--http=127.0.0.1:${puerto}`, ...dir, `--publicDir=${RAIZ}`,
+  const proc = spawn(bin, ["serve", `--http=${host}:${puerto}`, ...dir, `--publicDir=${RAIZ}`,
     `--hooksDir=${path.join(RAIZ, "servidor/pb_hooks")}`, `--migrationsDir=${path.join(RAIZ, "servidor/pb_migrations")}`], { stdio:["ignore", "pipe", "pipe"] });
   let log = ""; proc.stdout.on("data", d => log += d); proc.stderr.on("data", d => log += d);
-  const url = `http://127.0.0.1:${puerto}`;
+  const url = `http://${host}:${puerto}`;
   for (let i = 0; i < 100; i++){
     try { const r = await fetch(url + "/api/sync/estado"); if (r.ok) break; } catch(e){}
     if (proc.exitCode != null) throw new Error("PocketBase se cerró al partir:\n" + log);
